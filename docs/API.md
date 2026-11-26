@@ -7,11 +7,12 @@ Base URL: `https://<ORBIT_DOMAIN>`. JSON everywhere. Auth uses `Authorization: B
 | Method | Path | Notes |
 |---|---|---|
 | GET | `/api/auth/{github\|google}/start?client=web\|ios\|desktop&code_challenge=&redirect=` | Sets the `state` cookie and redirects to the provider |
-| GET | `/api/auth/{provider}/callback` | Web: sets the session and redirects to `/`. ios/desktop: redirects to `orbit://auth/callback?code=` / `http://127.0.0.1:<port>/callback?code=`. Failures redirect with `?error=access_denied\|email_unverified\|account_exists\|provider_error` (web: to `/login`). `account_exists`: sign in the way you did before, or by email link (D25) |
+| GET | `/api/auth/{provider}/callback` | Web: sets the session and redirects to `/`. ios/desktop: shows a "Continue as …" page (D32). Failures redirect with `?error=access_denied\|email_unverified\|account_exists\|provider_error` (web: to `/login`). `account_exists`: sign in the way you did before, or by email link (D25) |
 | POST | `/api/auth/email/start` | `{email, client?, code_challenge?, redirect?}` → 202 whether or not an account exists. 3 per address and 10 per IP per 15 min, 100 per hour in total (429); 503 if mail can't be sent. No captcha (D24) |
 | GET | `/api/auth/email/verify?token=` | A confirmation page. Does not use up the token, so mail scanners can't burn it |
 | POST | `/api/auth/email/verify` | Form field `token`. Single-use, 15 min, same-origin only. Same client handling as the OAuth callback |
 | GET | `/api/auth/methods` | `{github, google, email}`: which sign-in methods are configured. Public |
+| POST | `/api/auth/confirm` | The native page's button (form field `token`, 5 min, same-origin only). Redirects to `orbit://auth/callback?code=` / `http://127.0.0.1:<port>/callback?code=` |
 | POST | `/api/auth/token` | `{grant_type:"authorization_code", code, code_verifier}` or `{grant_type:"refresh_token", refresh_token}` → `{access_token, expires_in, refresh_token}` |
 | POST | `/api/auth/logout` | `{refresh_token}` (or the web cookie). Revokes the refresh token family; 204 |
 | GET | `/api/me` | Profile, linked identities, limits |

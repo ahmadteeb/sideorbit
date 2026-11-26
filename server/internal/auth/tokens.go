@@ -26,12 +26,14 @@ const (
 	purposeMagic    = "magic_link"
 
 	exchangeTTL = time.Minute
+	confirmTTL  = 5 * time.Minute
 	magicTTL    = 15 * time.Minute
 
 	// JWT audiences keep one kind of signed token from being used as another.
-	audAccess = "orbit-access"
-	audState  = "orbit-oauth-state"
-	audDelete = "orbit-delete-account"
+	audAccess  = "orbit-access"
+	audState   = "orbit-oauth-state"
+	audDelete  = "orbit-delete-account"
+	audConfirm = "orbit-confirm-app-sign-in"
 
 	cookieAccess  = "orbit_access"
 	cookieRefresh = "orbit_refresh"

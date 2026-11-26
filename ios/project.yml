@@ -2,11 +2,30 @@ name: Orbit
 options:
   deploymentTarget:
     iOS: "16.0"
+packages:
+  OrbitKit:
+    path: Packages/OrbitKit
 targets:
   Orbit:
     type: application
     platform: iOS
     sources: [Orbit]
+    dependencies:
+      - package: OrbitKit
+    info:
+      path: Orbit/Info.plist
+      properties:
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        UILaunchScreen: {}
+        UISupportedInterfaceOrientations:
+          - UIInterfaceOrientationPortrait
+          - UIInterfaceOrientationPortraitUpsideDown
+          - UIInterfaceOrientationLandscapeLeft
+          - UIInterfaceOrientationLandscapeRight
+        CFBundleURLTypes:
+          - CFBundleURLName: dev.orbitstore.Orbit
+            CFBundleURLSchemes: [orbit]
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: dev.orbitstore.Orbit
@@ -14,9 +33,6 @@ targets:
         CURRENT_PROJECT_VERSION: "1"
         SWIFT_VERSION: "5.0"
         TARGETED_DEVICE_FAMILY: "1,2"
-        GENERATE_INFOPLIST_FILE: YES
-        INFOPLIST_KEY_UILaunchScreen_Generation: YES
-        INFOPLIST_KEY_UISupportedInterfaceOrientations: "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight"
 schemes:
   Orbit:
     build:

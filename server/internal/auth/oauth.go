@@ -13,10 +13,14 @@ import (
 	"time"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/golang-jwt/jwt/v5"
+	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"golang.org/x/oauth2"
 	"golang.org/x/oauth2/endpoints"
 
 	"github.com/ahmadteeb/sideorbit/server/internal/httpx"
+	"github.com/ahmadteeb/sideorbit/server/internal/store/db"
 )
 
 const (
@@ -235,5 +239,51 @@ func (s *Service) oauthCallback(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.log.Info("identity verified", "provider", p.name, "user_id", user.ID, "client", t.client)
-	s.finish(w, r, user, t, http.StatusFound)
+	if t.client == ClientWeb {
+		s.finish(w, r, user, t, http.StatusFound)
+		return
+	}
+	s.askToContinue(w, r, user, t)
+}
+
+// askToContinue makes a native sign-in visible. Any app can start a flow with
+// its own challenge and claim the orbit:// scheme; without this step a provider
+// that remembers the user would hand it a code with no sign of it (D32).
+func (s *Service) askToContinue(w http.ResponseWriter, r *http.Request, user db.User, t target) {
+	token, err := s.sign(claims{
+		RegisteredClaims: jwt.RegisteredClaims{Subject: user.ID.String()},
+		Client:           t.client, Challenge: t.challenge, Redirect: t.redirect,
+	}, audConfirm, confirmTTL)
+	if err != nil {
+		httpx.Internal(w, r, err)
+		return
+	}
+	email := ""
+	if user.Email != nil {
+		email = *user.Email
+	}
+	writePage(w, http.StatusOK, "/api/auth/confirm", token, email, t.client)
+}
+
+func (s *Service) confirm(w http.ResponseWriter, r *http.Request) {
+	r.Body = http.MaxBytesReader(w, r.Body, 4<<10)
+	c, err := s.parse(r.PostFormValue("token"), audConfirm)
+	var id uuid.UUID
+	if err == nil {
+		id, err = uuid.Parse(c.Subject)
+	}
+	if err != nil {
+		writePage(w, http.StatusBadRequest, "", "", "", "")
+		return
+	}
+	user, err := s.q.GetActiveUser(r.Context(), id)
+	if errors.Is(err, pgx.ErrNoRows) {
+		writePage(w, http.StatusBadRequest, "", "", "", "")
+		return
+	}
+	if err != nil {
+		httpx.Internal(w, r, err)
+		return
+	}
+	s.finish(w, r, user, target{client: c.Client, challenge: c.Challenge, redirect: c.Redirect}, http.StatusSeeOther)
 }

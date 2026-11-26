@@ -17,7 +17,14 @@ jobs:
           persist-credentials: false
       - name: OrbitTheme.swift matches the design system copy
         run: diff design-system/orbit/OrbitTheme.swift ios/Orbit/DesignSystem/OrbitTheme.swift
-      - run: brew install xcodegen
+      - name: Unit tests (OrbitKit)
+        run: swift test --package-path ios/Packages/OrbitKit
+      - name: Install XcodeGen (pinned)
+        run: |
+          curl -fsSL -o xcodegen.zip https://github.com/yonaskolb/XcodeGen/releases/download/2.46.0/xcodegen.zip
+          echo "4d9e34b62172d645eed6457cac13fc222569974098ef4ee9c3368bedf0196806  xcodegen.zip" | shasum -a 256 -c -
+          unzip -q xcodegen.zip -d "$RUNNER_TEMP"
+          echo "$RUNNER_TEMP/xcodegen/bin" >> "$GITHUB_PATH"
       - run: xcodegen generate
         working-directory: ios
       - name: Build (unsigned)

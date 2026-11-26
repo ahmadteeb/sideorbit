@@ -26,7 +26,7 @@
 | Piece | Job | Notes |
 |---|---|---|
 | **Orbit iOS app** | Holds the Apple ID session (Keychain), the dev certificate and the pairing file. Re-signs and installs IPAs on the device via the loopback VPN + pairing record, and reports status to the server | Forked/linked from SideStore libraries (AGPL) |
-| **LocalDevVPN** | Third-party App Store VPN that routes a loopback address so iOS thinks a trusted "computer" is connected | Must be ON during install/refresh. Orbit shows its status and deep-links to it |
+| **LocalDevVPN** (D31) | Third-party App Store VPN that routes a loopback address so iOS thinks a trusted "computer" is connected | Must be ON during install/refresh. Orbit shows its status and deep-links to it |
 | **Pairing file** | Lockdown pairing record that lets Orbit talk to `installd` / `lockdownd` as the trusted host | Created by Orbit Setup. Can be invalidated by iOS updates/resets, so Orbit has a re-pair flow |
 | **anisette-v3-server** | Provides Apple "anisette" headers (device provisioning data) that Apple's auth endpoints require | Unmodified upstream Docker image, never exposed publicly. Only reachable through the gateway |
 | **Anisette gateway** (in orbit-server) | Reverse-proxies `/v3/client_info`, `/v3/get_headers` and the `/v3/provisioning_session` WebSocket. Requires a valid Orbit access token, rate-limits per user/device and logs **metadata only** | Turns a public anisette server (abuse target) into a members-only one |

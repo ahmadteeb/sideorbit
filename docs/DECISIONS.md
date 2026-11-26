@@ -34,14 +34,27 @@ Format: **ID · Decision** · *Why* · Alternatives rejected. Add new entries at
 | D28 | **Anisette provisioning is also capped per IP (10/h) and overall (100/h)** | Per-user quotas reset when an account is deleted and recreated; the shared anisette identity is the asset to protect | Per-user quotas only; blocking re-registration (needs keeping data after deletion) |
 | D29 | **Dashboard sign-in buttons are text-only; the sign-in page uses no GitHub or Google logo** | The official brand assets aren't in the repo and unofficial copies aren't allowed (MASTER §6). Add the official assets before a public launch | Icons from a third-party set |
 | D30 | **A push subscription records the web session that created it and is deleted when that session ends** | A signed-out or revoked browser must not keep receiving an account's device alerts. Stores one more id per subscription | Client-side unsubscribe only (misses remote revocation) |
+| D31 | **P02: LocalDevVPN is driven by `localdevvpn://enable?scheme=orbit` (and `disable`), or its Shortcuts action** (`ControlLocalDevVPNIntent`, runs without opening the app) | Read from its source on 2026-11-27; `scheme` makes it switch back to Orbit. Needs a device check | Asking the user to toggle it by hand |
+| D32 | **iOS and desktop sign-ins end on a "Continue as …" page before any code is issued** | Another app can start its own flow and claim `orbit://`; this makes a silent sign-in impossible. A custom scheme can't be made exclusive, and Associated Domains needs a paid account (hard rule 4), so a user who presses the button for an app they didn't open is still exposed | Redirecting straight away |
 
 ## Pending decisions (to be resolved during the named phase)
 
 | ID | Question | Phase |
 |---|---|---|
-| P01 | `minimuxer` vs `idevice` on iOS; is `em_proxy` still required with LocalDevVPN? | 3 |
-| P02 | LocalDevVPN URL scheme / App Intents for Shortcuts | 3 / 5 |
+| P01 | **Research done (below); the dependency choice needs the owner's approval** | 3 |
 | P03 | winget IDs for Apple Devices / AMDS; fallback when winget is missing (older Windows 10) | 4 |
 | P04 | Flatpak USB strategy (host usbmuxd via portal vs `--device=all` + bundled daemon) | 4 |
 | P05 | LiveContainer license and integration (built-in store mode) | 5 |
 | P06 | Code signing: Apple notarization / Windows Authenticode certificates (cost vs warnings) | 6 |
+
+## P01 research (2026-11-27, SideStore `develop` at 4f3d18d)
+
+- SideStore uses **minimuxer** (AGPL-3.0), which wraps both an `idevice` and a `libimobiledevice` gateway. It is not a choice between the two.
+- **em_proxy is still used**: SideStore starts it before minimuxer, and minimuxer ships it as a prebuilt binary (checksum-pinned).
+- **AltSign was replaced by SideSign** (GPL-3.0 per its README; no `LICENSE` file). It does Apple sign-in, the developer portal and app signing. GPL-3.0 and AGPL-3.0 may be combined.
+- SideSign depends on `CodeSignKit`, `GSACryptoKit`, `AnisetteKit` (all AGPL-3.0), and minimuxer on `RemotePairingKit`. **All four are in one person's repositories, created in August 2026, with 0–7 stars, and tracked by branch rather than version.** `GSACryptoKit` handles the Apple ID password.
+- SideSign's remote anisette provider can't send our bearer token, but it implements a public protocol, so Orbit can supply its own.
+- Pairing files SideStore looks for: `ALTPairingFile.mobiledevicepairing`, `PairingFile_Lockdown.plist`, `PairingFile_RemoteRP.plist`.
+
+**Proposed:** depend on SideSign and minimuxer, pinned to exact commits with a committed `Package.resolved` so no branch can move silently, and review `GSACryptoKit` before it sees a real Apple ID.
+**Alternatives:** fork those repositories into this account and pin the forks; or use the older AltSign (no license file, which rules it out unless clarified).

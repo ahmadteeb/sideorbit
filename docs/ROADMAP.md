@@ -40,17 +40,17 @@ Each phase is one PR (or a few sub-PRs) with a slash command in `.claude/command
 
 *Checked in headless Chromium against the real stack: sign-in, session renewal, service worker, sign-out. Still to check by a human: a real push arriving on an iPhone Home Screen app (needs a deployed server with HTTPS).*
 
-## Phase 3: iOS app ☐  → `/phase-3`
-- [ ] Resolve **P01** first (SideStore library choice); record in DECISIONS.md
-- [ ] Xcode project via **XcodeGen** (`ios/project.yml`) so it builds on CI without a Mac; SPM deps
-- [ ] Orbit login (`ASWebAuthenticationSession`), Keychain token storage
+## Phase 3: iOS app ◐  → `/phase-3`
+- [ ] Resolve **P01** first (SideStore library choice); record in DECISIONS.md. *Researched; the dependency choice awaits the owner (see DECISIONS → P01 research)*
+- [x] Xcode project via **XcodeGen** (`ios/project.yml`) so it builds on CI without a Mac; SPM deps
+- [x] Orbit login (`ASWebAuthenticationSession`), Keychain token storage. *Not yet tried on a device*
 - [ ] Apple ID sign-in (anisette via the gateway, 2FA), Keychain storage, certificate management (create/reuse/revoke with a confirmation)
 - [ ] Pairing file import/detect; VPN reachability check; **re-pair flow** (detect invalid → notify → guide)
 - [ ] App sources (AltStore source JSON), app detail, install, refresh, remove; App ID usage tracker (10/week)
 - [ ] Refresh engine: BGAppRefreshTask + App Intent "Refresh Apps"; local notifications (T-48/24/6h + on failure)
 - [ ] Status reporting to the server (`POST /api/devices/:id/report`)
 - [ ] UI per `design-system/orbit/pages/ios.md`; Dynamic Type AX5; VoiceOver labels
-- [ ] CI: unsigned `Orbit.ipa` artifact
+- [x] CI: unsigned `Orbit.ipa` artifact
 
 **Done when:** on a real iPhone (installed via iloader for now), the user can sign in, add a source, install an app, and see it refresh through the Shortcut and through background refresh, with matching events on the dashboard.
 
