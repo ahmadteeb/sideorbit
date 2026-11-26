@@ -13,8 +13,8 @@ Each phase is one PR (or a few sub-PRs) with a slash command in `.claude/command
 
 **Done when:** all 4 workflows are green on `main`.
 
-## Phase 1: Backend + deployment ☐  → `/phase-1`
-- [ ] `server/`: config (env), slog, health (`/healthz`, `/readyz`), Postgres + goose migrations from `DATA_MODEL.md`
+## Phase 1: Backend + deployment ◐  → `/phase-1`
+- [x] `server/`: config (env), slog, health (`/healthz`, `/readyz`), Postgres + goose migrations from `DATA_MODEL.md`
 - [ ] Auth: GitHub + Google OAuth (PKCE, `state`), email magic link (SMTP, 15-min single-use hashed token), JWT access + rotating refresh tokens, iOS one-time-code exchange (`orbit://auth/callback`)
 - [ ] Devices, apps, refresh events, sources CRUD per `API.md`
 - [ ] **Anisette gateway**: proxy `/anisette/v3/client_info`, `/anisette/v3/get_headers`, `/anisette/v3/provisioning_session` (WebSocket) to the internal anisette container; bearer auth; per-user + per-IP rate limits; metadata-only logs
@@ -22,7 +22,7 @@ Each phase is one PR (or a few sub-PRs) with a slash command in `.claude/command
 - [ ] Scheduler: expiry thresholds (24h / 6h), device-silent (48h), deduplicated via `alerts_sent`
 - [ ] `deploy/`: compose with caddy + server + postgres + anisette; `.env.example`; backup script
 - [ ] Tests: handlers (table-driven), auth flows (httptest + fake OAuth provider), gateway (WebSocket proxy test)
-- [ ] Resolve **P07** (abuse controls)
+- [x] Resolve **P07** (abuse controls): D24
 
 **Done when:** `docker compose up` on a fresh VPS gives HTTPS, login works with GitHub/Google/email, `curl` with a token reaches anisette through the gateway, and without a token gets 401.
 

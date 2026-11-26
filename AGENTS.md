@@ -47,7 +47,7 @@ Commits use Conventional Commits (`feat(server): …`, `fix(ios): …`). One PR 
 ## 4. Commands
 
 ```bash
-# server
+# server (database tests need TEST_DATABASE_URL pointing at a Postgres 16; they skip without it)
 cd server && go test ./... && go vet ./... && staticcheck ./...
 cd server && sqlc generate && goose -dir migrations postgres "$DATABASE_URL" up
 # web
