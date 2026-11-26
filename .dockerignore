@@ -3,6 +3,14 @@
 !LICENSE
 !NOTICE
 !server
+!web
+web/node_modules
+web/build
+web/.svelte-kit
+web/test-results
+web/playwright-report
+server/internal/web/dist/*
+!server/internal/web/dist/.gitkeep
 **/*_test.go
 **/.env*
 **/*.pem

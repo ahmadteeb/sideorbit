@@ -32,7 +32,9 @@
     --shadow-card: none;
   }
 }
+:root[data-theme="light"] { color-scheme: light; }
 :root[data-theme="dark"] {
+  color-scheme: dark;
   --color-bg: #0B1120; --color-surface: #151C2E; --color-surface-2: #1E2740;
   --color-text: #F8FAFC; --color-text-muted: #A3AFC2;
   --color-border: #2A3550; --color-border-strong: #64748B;

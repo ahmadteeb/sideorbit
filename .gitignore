@@ -25,7 +25,10 @@ coverage.out
 node_modules/
 web/.svelte-kit/
 web/build/
-server/internal/web/dist/
+server/internal/web/dist/*
+!server/internal/web/dist/.gitkeep
+web/test-results/
+web/playwright-report/
 
 # --- iOS ---
 ios/*.xcodeproj/

@@ -12,7 +12,9 @@
 | LiveContainer | Verify in Phase 5 (P05) | Decide the integration approach after checking |
 | usbmuxd (bundled on Linux) | GPL (verify version) | Ship it as a separate binary with notice + source offer |
 | UI-UX-Pro-Max skill data | MIT | Design decisions are derived from it; credit it in `design-system/orbit/MASTER.md` |
-| IBM Plex Sans, JetBrains Mono | SIL OFL 1.1 | Fine to bundle on web/desktop with the license file |
+| IBM Plex Sans, JetBrains Mono (via @fontsource) | SIL OFL 1.1 | Bundled in the dashboard with their license files (`web/static/licenses/`) |
+| Lucide (`@lucide/svelte`) | ISC | Dashboard icons |
+| Playwright (Apache-2.0), `@axe-core/playwright` (MPL-2.0) | tests only | Not shipped |
 | Apple drivers (Windows) | Apple proprietary | **Never bundle.** Installed from the official source on the user's machine (D15) |
 | GitHub / Google logos | Brand guidelines | Use the official sign-in button assets unmodified |
 

@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"net/http"
 	"net/url"
+	"strings"
 	"sync"
 	"time"
 
@@ -22,10 +23,17 @@ type check func(context.Context) error
 // module is a group of endpoints.
 type module interface{ Routes(chi.Router) }
 
-func newRouter(log *slog.Logger, db, anisette check, modules ...module) http.Handler {
+// newRouter wires the endpoints. site answers every path that isn't an API,
+// gateway or health route; nil means there is no dashboard.
+func newRouter(log *slog.Logger, db, anisette check, site http.Handler, modules ...module) http.Handler {
 	r := chi.NewRouter()
 	r.Use(requestLogger(log), middleware.Recoverer)
-	r.NotFound(func(w http.ResponseWriter, _ *http.Request) {
+	r.NotFound(func(w http.ResponseWriter, req *http.Request) {
+		api := strings.HasPrefix(req.URL.Path, "/api/") || strings.HasPrefix(req.URL.Path, "/anisette/")
+		if site != nil && !api {
+			site.ServeHTTP(w, req)
+			return
+		}
 		httpx.Error(w, http.StatusNotFound, "not_found", "There's nothing at this address.", "")
 	})
 	r.MethodNotAllowed(func(w http.ResponseWriter, _ *http.Request) {

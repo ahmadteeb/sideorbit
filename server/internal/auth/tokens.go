@@ -161,7 +161,7 @@ func (s *Service) rotate(ctx context.Context, refresh, wantClient string) (token
 		if row.UsedAt != nil {
 			reused = true
 			s.log.Warn("refresh token reuse; revoking the session", "user_id", row.UserID, "client", row.Client)
-			return q.RevokeFamily(ctx, row.FamilyID) // commit the revocation
+			return endSession(ctx, q, row.FamilyID) // commit the revocation
 		}
 		if err := q.MarkRefreshTokenUsed(ctx, row.ID); err != nil {
 			return err
@@ -175,6 +175,14 @@ func (s *Service) rotate(ctx context.Context, refresh, wantClient string) (token
 		err = ErrInvalidToken
 	}
 	return pair, err
+}
+
+// endSession revokes a session's tokens and stops the alerts it turned on.
+func endSession(ctx context.Context, q *db.Queries, session uuid.UUID) error {
+	if err := q.RevokeFamily(ctx, session); err != nil {
+		return err
+	}
+	return q.DeleteSessionPushSubscriptions(ctx, session)
 }
 
 type tokenRequest struct {
@@ -274,7 +282,7 @@ func (s *Service) logout(w http.ResponseWriter, r *http.Request) {
 	if refresh != "" {
 		err := s.withSession(r.Context(), refresh, func(q *db.Queries, row db.LockRefreshTokenRow) error {
 			s.log.Info("signed out", "user_id", row.UserID)
-			return q.RevokeFamily(r.Context(), row.FamilyID)
+			return endSession(r.Context(), q, row.FamilyID)
 		})
 		if err != nil && !errors.Is(err, ErrInvalidToken) {
 			httpx.Internal(w, r, err)

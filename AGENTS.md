@@ -52,7 +52,8 @@ cd server && go test ./... && go vet ./... && staticcheck ./...
 cd server && sqlc generate   # after editing internal/store/queries or migrations; commit the result
 cd server && goose -dir migrations postgres "$DATABASE_URL" up
 # web
-cd web && pnpm i && pnpm check && pnpm test && pnpm build
+cd web && pnpm i && pnpm check && pnpm test && pnpm build && pnpm test:e2e
+# to serve the dashboard from a locally built server: cp -r web/build/. server/internal/web/dist/
 # deploy (local)
 cd deploy && cp .env.example .env && docker compose up -d --build
 # ios (macOS / CI only)

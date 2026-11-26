@@ -28,15 +28,17 @@ Each phase is one PR (or a few sub-PRs) with a slash command in `.claude/command
 
 *Checked on a local stack with the real anisette image (gateway with and without a token, backup). Still to check on a real VPS: HTTPS certificate and sign-in with real GitHub/Google/SMTP credentials. Commands: `docs/SELF_HOSTING.md` → Verify your install.*
 
-## Phase 2: Web dashboard ☐  → `/phase-2`
-- [ ] SvelteKit + adapter-static, embedded into the Go binary (`embed.FS`)
-- [ ] Pages per `WEB_DASHBOARD.md` + `design-system/orbit/pages/dashboard.md`
-- [ ] Self-host IBM Plex Sans + JetBrains Mono (`font-display: swap`, OFL license file); the Phase 0 skeleton uses the system fallback
-- [ ] PWA manifest, service worker, web push subscribe/unsubscribe/test, iOS "Add to Home Screen" guidance
-- [ ] Playwright: login (mocked), device list, enabling push; axe accessibility check with no serious violations
-- [ ] UX checklist passed; light + dark screenshots at 375 / 768 / 1440
+## Phase 2: Web dashboard ◐  → `/phase-2`
+- [x] SvelteKit + adapter-static, embedded into the Go binary (`embed.FS`)
+- [x] Pages per `WEB_DASHBOARD.md` + `design-system/orbit/pages/dashboard.md`
+- [x] Self-host IBM Plex Sans + JetBrains Mono (`font-display: swap`, OFL license file); the Phase 0 skeleton uses the system fallback
+- [x] PWA manifest, service worker, web push subscribe/unsubscribe/test, iOS "Add to Home Screen" guidance
+- [x] Playwright: login (mocked), device list, enabling push; axe accessibility check with no serious violations
+- [x] UX checklist passed; light + dark screenshots at 375 / 768 / 1440
 
 **Done when:** a user can log in, see a seeded device and apps, and receive a test web push on an iPhone home-screen PWA.
+
+*Checked in headless Chromium against the real stack: sign-in, session renewal, service worker, sign-out. Still to check by a human: a real push arriving on an iPhone Home Screen app (needs a deployed server with HTTPS).*
 
 ## Phase 3: iOS app ☐  → `/phase-3`
 - [ ] Resolve **P01** first (SideStore library choice); record in DECISIONS.md

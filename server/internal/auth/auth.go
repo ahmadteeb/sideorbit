@@ -85,6 +85,7 @@ func New(cfg Config, pool *pgxpool.Pool, log *slog.Logger) *Service {
 
 // Routes registers the endpoints on r.
 func (s *Service) Routes(r chi.Router) {
+	r.Get("/api/auth/methods", s.methods)
 	r.Get("/api/auth/{provider}/start", s.oauthStart)
 	r.Get("/api/auth/{provider}/callback", s.oauthCallback)
 	if s.cfg.Mailer != nil {
@@ -102,6 +103,8 @@ func (s *Service) Routes(r chi.Router) {
 		r.Get("/api/me", s.me)
 		r.Post("/api/me/delete-intent", s.deleteIntent)
 		r.Delete("/api/me", s.deleteMe)
+		r.Get("/api/me/sessions", s.listSessions)
+		r.Delete("/api/me/sessions/{id}", s.revokeSession)
 	})
 }
 

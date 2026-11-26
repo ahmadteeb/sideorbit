@@ -20,7 +20,7 @@ import (
 
 func sourceServer(t *testing.T) *httptest.Server {
 	bodies := map[string]string{
-		"/good.json": `{"name":"Test Source","identifier":"x","apps":[]}`,
+		"/good.json": `{"name":"Test Source","identifier":"x","apps":[{"name":"One"},{"name":"Two"},7]}`,
 		"/noapps":    `{"name":"x"}`,
 		"/noname":    `{"apps":[]}`,
 		"/html":      `<html></html>`,
@@ -58,6 +58,14 @@ func TestSources(t *testing.T) {
 	owner, rival := apitest.NewUser(t, pool), apitest.NewUser(t, pool)
 	add := func(user uuid.UUID, url string) *httptest.ResponseRecorder {
 		return apitest.Do(t, h, user, "POST", "/api/sources", `{"url":"`+url+`"}`)
+	}
+
+	preview := apitest.Do(t, h, rival, "POST", "/api/sources/preview", `{"url":"`+srv.URL+`/good.json"}`)
+	if preview.Code != 200 || !strings.Contains(preview.Body.String(), `"name":"Test Source","app_count":3,"apps":["One","Two"]`) {
+		t.Fatalf("preview: %d %s", preview.Code, preview.Body)
+	}
+	if n := apitest.Count(t, pool, "SELECT count(*) FROM sources"); n != 0 {
+		t.Fatalf("a preview saved %d sources", n)
 	}
 
 	rec := add(owner, srv.URL+"/good.json#frag")

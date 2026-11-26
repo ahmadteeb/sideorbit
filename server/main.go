@@ -25,6 +25,7 @@ import (
 	"github.com/ahmadteeb/sideorbit/server/internal/safehttp"
 	"github.com/ahmadteeb/sideorbit/server/internal/scheduler"
 	"github.com/ahmadteeb/sideorbit/server/internal/store"
+	"github.com/ahmadteeb/sideorbit/server/internal/web"
 )
 
 func main() {
@@ -79,7 +80,7 @@ func run() error {
 	}
 	var sender scheduler.Sender
 	if cfg.push.Public != "" {
-		alerts := push.New(cfg.push, db, log, accounts.RequireUser, safehttp.New(10*time.Second))
+		alerts := push.New(cfg.push, db, log, accounts.RequireUser, accounts.SessionID, safehttp.New(10*time.Second))
 		modules, sender = append(modules, alerts), alerts
 	} else {
 		log.Warn("web push is off: VAPID keys are not set")
@@ -90,7 +91,7 @@ func run() error {
 	defer stopJobs() // runs before Wait
 	jobs.Go(func() { scheduler.New(db, sender, log, cfg.retention).Run(jobsCtx) })
 
-	handler := newRouter(log, db.Ping, anisetteCheck(cfg.anisetteURL), modules...)
+	handler := newRouter(log, db.Ping, anisetteCheck(cfg.anisetteURL), web.Handler(), modules...)
 	srv := &http.Server{
 		Addr:              cfg.httpAddr,
 		Handler:           handler,

@@ -22,6 +22,8 @@ import (
 	"github.com/ahmadteeb/sideorbit/server/internal/store/storetest"
 )
 
+var testSession = uuid.New()
+
 // fakePush is a push service. Each endpoint path answers with its queued
 // statuses, then 201.
 type fakePush struct {
@@ -68,7 +70,8 @@ func newEnv(t *testing.T) env {
 	}
 	fake := newFakePush(t)
 	svc := New(Keys{Public: public, Private: private, Subject: "mailto:ops@example.com"}, pool,
-		slog.New(slog.DiscardHandler), apitest.RequireUser, fake.Client())
+		slog.New(slog.DiscardHandler), apitest.RequireUser,
+		func(*http.Request) uuid.UUID { return testSession }, fake.Client())
 	svc.retryDelays = []time.Duration{0, 0}
 	return env{apitest.Router(svc), svc, pool, fake, apitest.NewUser(t, pool)}
 }
@@ -127,6 +130,9 @@ func TestSubscriptionLifecycle(t *testing.T) {
 	e := newEnv(t)
 	other := apitest.NewUser(t, e.pool)
 	id := e.subscribe(t, e.user, "/a")
+	if e.count(t, "WHERE session_id = '"+testSession.String()+"'") != 1 {
+		t.Error("the subscription isn't tied to its session")
+	}
 	if again := e.subscribe(t, e.user, "/a"); again != id || e.count(t, "") != 1 {
 		t.Errorf("re-subscribing made a second record")
 	}

@@ -34,6 +34,7 @@ func New(pool *pgxpool.Pool, requireUser func(http.Handler) http.Handler) *Servi
 // Routes registers the endpoints on r.
 func (s *Service) Routes(r chi.Router) {
 	r.With(s.requireUser).Get("/api/events", s.list)
+	r.With(s.requireUser).Get("/api/events/summary", s.summary)
 }
 
 type view struct {
@@ -68,6 +69,36 @@ func decodeCursor(c string) (time.Time, uuid.UUID, error) {
 	}
 	id, err := uuid.Parse(idText)
 	return time.UnixMicro(n), id, err
+}
+
+const summaryDays = 30
+
+type dayView struct {
+	Date    string `json:"date"`
+	Success int64  `json:"success"`
+	Failure int64  `json:"failure"`
+}
+
+// summary counts refreshes per UTC day over the last 30 days, oldest first,
+// including days with none.
+func (s *Service) summary(w http.ResponseWriter, r *http.Request) {
+	today := time.Now().UTC().Truncate(24 * time.Hour)
+	since := today.AddDate(0, 0, 1-summaryDays)
+	rows, err := s.q.SummarizeEvents(r.Context(), db.SummarizeEventsParams{UserID: auth.UserID(r.Context()), Since: since})
+	if err != nil {
+		httpx.Internal(w, r, err)
+		return
+	}
+	counts := map[string]db.SummarizeEventsRow{}
+	for _, row := range rows {
+		counts[row.Day] = row
+	}
+	days := make([]dayView, summaryDays)
+	for i := range days {
+		date := since.AddDate(0, 0, i).Format(time.DateOnly)
+		days[i] = dayView{date, counts[date].Success, counts[date].Failure}
+	}
+	httpx.JSON(w, http.StatusOK, map[string]any{"days": days})
 }
 
 func (s *Service) list(w http.ResponseWriter, r *http.Request) {

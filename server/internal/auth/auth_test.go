@@ -18,6 +18,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/golang-jwt/jwt/v5"
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"golang.org/x/oauth2"
 
@@ -765,5 +766,82 @@ func TestMagicLinkRejects(t *testing.T) {
 				t.Errorf("POST: %d", rec.Code)
 			}
 		})
+	}
+}
+
+func TestMethods(t *testing.T) {
+	e := newEnv(t)
+	rec := e.do(req{method: "GET", target: "/api/auth/methods"})
+	if rec.Code != 200 || rec.Body.String() != `{"email":true,"github":true,"google":true}`+"\n" {
+		t.Errorf("got %d %s", rec.Code, rec.Body)
+	}
+}
+
+func TestSessions(t *testing.T) {
+	e := newEnv(t)
+	app := e.signIn()
+	web := cookieMap(e.oauth("github", url.Values{}))
+	// The request cookie carries the __Host- name the server set.
+	cookies := []*http.Cookie{web[cookieAccess], web[cookieRefresh]}
+	list := func() []sessionView {
+		t.Helper()
+		rec := e.do(req{method: "GET", target: "/api/me/sessions", cookies: cookies})
+		var body struct{ Sessions []sessionView }
+		if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+			t.Fatalf("%d %s", rec.Code, rec.Body)
+		}
+		return body.Sessions
+	}
+	// Alerts turned on from a session end with it.
+	subscribe := func(session uuid.UUID) {
+		t.Helper()
+		e.exec("INSERT INTO push_subscriptions (id, user_id, endpoint, p256dh, auth, session_id) SELECT gen_random_uuid(), u.id, '" +
+			uuid.NewString() + "', 'k', 'a', '" + session.String() + "' FROM users u WHERE u.email = 'ada@example.com'")
+	}
+	// Rotation must not create a second session.
+	_, app2 := e.token(refresh(app.RefreshToken))
+	sessions := list()
+	if len(sessions) != 2 {
+		t.Fatalf("%d sessions", len(sessions))
+	}
+	var other, mine uuid.UUID
+	for _, s := range sessions {
+		if s.Current {
+			mine = s.ID
+		} else if s.Client == ClientIOS {
+			other = s.ID
+		}
+	}
+	if mine == uuid.Nil || other == uuid.Nil {
+		t.Fatalf("sessions = %+v", sessions)
+	}
+	revoke := func(token string, id uuid.UUID) int {
+		return e.do(req{method: "DELETE", target: "/api/me/sessions/" + id.String(), header: bearer(token)}).Code
+	}
+	e.fake.email = "rival@gmail.com"
+	rival := cookieMap(e.oauth("google", url.Values{}))[cookieAccess]
+	if rec := e.do(req{method: "DELETE", target: "/api/me/sessions/" + other.String(), cookies: []*http.Cookie{rival}, header: map[string]string{csrfHeader: "1"}}); rec.Code != 404 {
+		t.Errorf("another account's session: %d", rec.Code)
+	}
+	if code := revoke(app2.AccessToken, uuid.New()); code != 404 {
+		t.Errorf("unknown session: %d", code)
+	}
+	subscribe(other)
+	subscribe(mine)
+	if code := revoke(app2.AccessToken, other); code != 204 {
+		t.Fatalf("revoke: %d", code)
+	}
+	if rec, _ := e.token(refresh(app2.RefreshToken)); rec.Code != 400 {
+		t.Errorf("revoked session still refreshes: %d", rec.Code)
+	}
+	if got := list(); len(got) != 1 || got[0].ID != mine {
+		t.Errorf("after revoke: %+v", got)
+	}
+	if n := e.count("SELECT count(*) FROM push_subscriptions"); n != 1 {
+		t.Errorf("%d subscriptions after revoking one session", n)
+	}
+	out := e.do(req{method: "POST", target: "/api/auth/logout", cookies: cookies, header: map[string]string{csrfHeader: "1"}})
+	if out.Code != 204 || e.count("SELECT count(*) FROM push_subscriptions") != 0 {
+		t.Errorf("sign-out left alerts on (%d)", out.Code)
 	}
 }

@@ -33,3 +33,20 @@ RETURNING *;
 
 -- name: DeleteUserLoginCodes :exec
 DELETE FROM login_codes WHERE user_id = $1 OR email = sqlc.narg(email)::citext;
+
+-- name: ListSessions :many
+-- One row per signed-in session that can still be refreshed.
+SELECT family_id, client,
+  min(created_at)::timestamptz AS created_at,
+  max(created_at)::timestamptz AS last_used_at
+FROM refresh_tokens
+WHERE user_id = $1
+GROUP BY family_id, client
+HAVING bool_or(used_at IS NULL AND revoked_at IS NULL AND expires_at > now())
+ORDER BY last_used_at DESC, family_id;
+
+-- name: RevokeUserFamily :execrows
+UPDATE refresh_tokens SET revoked_at = now() WHERE user_id = $1 AND family_id = $2 AND revoked_at IS NULL;
+
+-- name: GetRefreshTokenFamily :one
+SELECT family_id FROM refresh_tokens WHERE token_hash = $1;
