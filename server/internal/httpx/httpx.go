@@ -7,6 +7,7 @@ import (
 	"errors"
 	"io"
 	"log/slog"
+	"mime"
 	"net"
 	"net/http"
 	"net/netip"
@@ -44,6 +45,11 @@ func Internal(w http.ResponseWriter, r *http.Request, err error) {
 // the server must never receive cannot slip in unnoticed. On failure it writes
 // the error response and returns false.
 func Decode(w http.ResponseWriter, r *http.Request, v any) bool {
+	// Another site can't send this type without a CORS preflight, which is refused.
+	if t, _, err := mime.ParseMediaType(r.Header.Get("Content-Type")); err != nil || t != "application/json" {
+		Error(w, http.StatusUnsupportedMediaType, "unsupported_media_type", "Send the body as application/json.", "")
+		return false
+	}
 	dec := json.NewDecoder(http.MaxBytesReader(w, r.Body, MaxBody))
 	dec.DisallowUnknownFields()
 	err := dec.Decode(v)
@@ -76,7 +82,7 @@ func ClientIP(r *http.Request) string {
 		return host
 	}
 	if addr.IsPrivate() || addr.IsLoopback() {
-		if xff := r.Header.Get("X-Forwarded-For"); xff != "" {
+		if xff := strings.Join(r.Header.Values("X-Forwarded-For"), ","); xff != "" {
 			parts := strings.Split(xff, ",")
 			if fwd, err := netip.ParseAddr(strings.TrimSpace(parts[len(parts)-1])); err == nil {
 				addr = fwd

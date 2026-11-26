@@ -12,6 +12,7 @@ import (
 	"net/url"
 	"regexp"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -32,6 +33,7 @@ type fakeProvider struct {
 	srv           *httptest.Server
 	email         string
 	verified      bool
+	hostedDomain  string
 	gotChallenges map[string]string // code -> code_challenge
 }
 
@@ -73,7 +75,7 @@ func newFakeProvider(t *testing.T) *fakeProvider {
 		reply(w, r, []map[string]any{{"email": f.email, "primary": true, "verified": f.verified}})
 	})
 	mux.HandleFunc("GET /v1/userinfo", func(w http.ResponseWriter, r *http.Request) {
-		reply(w, r, map[string]any{"sub": "g-1", "email": f.email, "email_verified": f.verified, "name": "Ada"})
+		reply(w, r, map[string]any{"sub": "g-1", "email": f.email, "email_verified": f.verified, "name": "Ada", "hd": f.hostedDomain})
 	})
 	f.srv = httptest.NewServer(mux)
 	t.Cleanup(f.srv.Close)
@@ -132,6 +134,9 @@ type req struct {
 func (e *env) do(in req) *httptest.ResponseRecorder {
 	e.t.Helper()
 	r := httptest.NewRequest(in.method, in.target, strings.NewReader(in.body))
+	if strings.HasPrefix(in.body, "{") {
+		r.Header.Set("Content-Type", "application/json")
+	}
 	for k, v := range in.header {
 		r.Header.Set(k, v)
 	}
@@ -213,7 +218,7 @@ func bearer(token string) map[string]string {
 func cookieMap(rec *httptest.ResponseRecorder) map[string]*http.Cookie {
 	m := map[string]*http.Cookie{}
 	for _, c := range rec.Result().Cookies() {
-		m[c.Name] = c
+		m[strings.TrimPrefix(c.Name, "__Host-")] = c
 	}
 	return m
 }
@@ -242,9 +247,9 @@ func TestOAuthWeb(t *testing.T) {
 				t.Fatalf("callback: %d %q", rec.Code, rec.Header().Get("Location"))
 			}
 			cookies := cookieMap(rec)
-			for name, path := range map[string]string{cookieAccess: "/", cookieRefresh: "/api/auth"} {
+			for _, name := range []string{cookieAccess, cookieRefresh} {
 				c := cookies[name]
-				if c == nil || !c.HttpOnly || !c.Secure || c.SameSite != http.SameSiteLaxMode || c.Path != path {
+				if c == nil || c.Name != "__Host-"+name || !c.HttpOnly || !c.Secure || c.SameSite != http.SameSiteLaxMode || c.Path != "/" || c.Domain != "" {
 					t.Fatalf("cookie %s = %+v", name, c)
 				}
 			}
@@ -401,7 +406,7 @@ func TestTokenRequestRejects(t *testing.T) {
 		{"unknown field", `{"grant_type":"refresh_token","apple_id":"x"}`, 400},
 		{"unknown token", `{"grant_type":"refresh_token","refresh_token":"nope"}`, 400},
 		{"no token, no cookie", `{"grant_type":"refresh_token"}`, 400},
-		{"not json", `grant_type=refresh_token`, 400},
+		{"not json", `grant_type=refresh_token`, 415},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -526,12 +531,68 @@ func TestRequireUser(t *testing.T) {
 }
 
 func TestAccountLinking(t *testing.T) {
-	e := newEnv(t)
-	for _, p := range []string{"github", "google", "github"} {
-		e.oauth(p, url.Values{})
+	magic := func(e *env) *httptest.ResponseRecorder {
+		e.emailStart(`{"email":"` + strings.ToLower(e.fake.email) + `"}`)
+		return e.submit(e.sentToken(), "same-origin")
 	}
-	if users, ids := e.count("SELECT count(*) FROM users"), e.count("SELECT count(*) FROM identities"); users != 1 || ids != 2 {
-		t.Errorf("users = %d, identities = %d", users, ids)
+	oauth := func(provider string) func(*env) *httptest.ResponseRecorder {
+		return func(e *env) *httptest.ResponseRecorder { return e.oauth(provider, url.Values{}) }
+	}
+	tests := []struct {
+		name, email, hd string
+		first, second   func(*env) *httptest.ResponseRecorder
+		linked          bool
+	}{
+		{"magic link joins", "ada@corp.test", "", oauth("github"), magic, true},
+		{"gmail is authoritative", "ada@gmail.com", "", oauth("github"), oauth("google"), true},
+		{"workspace domain is authoritative", "ada@corp.test", "corp.test", oauth("github"), oauth("google"), true},
+		{"google for a foreign mailbox", "ada@corp.test", "", oauth("github"), oauth("google"), false},
+		{"another workspace domain", "ada@corp.test", "other.test", oauth("github"), oauth("google"), false},
+		{"github never joins", "ada@gmail.com", "", magic, oauth("github"), false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			e := newEnv(t)
+			e.fake.email, e.fake.hostedDomain = tt.email, tt.hd
+			tt.first(e)
+			rec := tt.second(e)
+			want := 1
+			if tt.linked {
+				want = 2
+			} else if got := rec.Header().Get("Location"); got != "/login?error=account_exists" || cookieMap(rec)[cookieAccess] != nil {
+				t.Errorf("second sign-in: %d %q", rec.Code, got)
+			}
+			if users, ids := e.count("SELECT count(*) FROM users"), e.count("SELECT count(*) FROM identities"); users != 1 || ids != want {
+				t.Errorf("users = %d, identities = %d, want %d", users, ids, want)
+			}
+		})
+	}
+}
+
+func TestLookalikeEmailRefused(t *testing.T) {
+	e := newEnv(t)
+	e.fake.email = "ada@gma\u0130l.com"
+	if got := e.oauth("github", url.Values{}).Header().Get("Location"); got != "/login?error=email_unverified" {
+		t.Errorf("provider: %q", got)
+	}
+	if rec := e.emailStart(`{"email":"ada@gma\u0130l.com"}`); rec.Code != 400 {
+		t.Errorf("magic link: %d", rec.Code)
+	}
+}
+
+// A rotation racing a revocation must not leave a live token behind.
+func TestRevocationRace(t *testing.T) {
+	e := newEnv(t)
+	for i := range 25 {
+		first := e.signIn()
+		_, second := e.token(refresh(first.RefreshToken))
+		var wg sync.WaitGroup
+		wg.Go(func() { _, _ = e.svc.rotate(context.Background(), second.RefreshToken, ClientIOS) })
+		wg.Go(func() { _, _ = e.svc.rotate(context.Background(), first.RefreshToken, ClientIOS) }) // reuse
+		wg.Wait()
+		if live := e.count("SELECT count(*) FROM refresh_tokens WHERE revoked_at IS NULL AND used_at IS NULL"); live != 0 {
+			t.Fatalf("round %d: %d token(s) survived reuse detection", i, live)
+		}
 	}
 }
 

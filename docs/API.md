@@ -7,8 +7,8 @@ Base URL: `https://<ORBIT_DOMAIN>`. JSON everywhere. Auth uses `Authorization: B
 | Method | Path | Notes |
 |---|---|---|
 | GET | `/api/auth/{github\|google}/start?client=web\|ios\|desktop&code_challenge=&redirect=` | Sets the `state` cookie and redirects to the provider |
-| GET | `/api/auth/{provider}/callback` | Web: sets the session and redirects to `/`. ios/desktop: redirects to `orbit://auth/callback?code=` / `http://127.0.0.1:<port>/callback?code=`. Failures redirect with `?error=access_denied\|email_unverified\|provider_error` (web: to `/login`) |
-| POST | `/api/auth/email/start` | `{email, client?, code_challenge?, redirect?}` → 202 whether or not an account exists. 3 per address and 10 per IP per 15 min (429); 503 if mail can't be sent. No captcha (D24) |
+| GET | `/api/auth/{provider}/callback` | Web: sets the session and redirects to `/`. ios/desktop: redirects to `orbit://auth/callback?code=` / `http://127.0.0.1:<port>/callback?code=`. Failures redirect with `?error=access_denied\|email_unverified\|account_exists\|provider_error` (web: to `/login`). `account_exists`: sign in the way you did before, or by email link (D25) |
+| POST | `/api/auth/email/start` | `{email, client?, code_challenge?, redirect?}` → 202 whether or not an account exists. 3 per address and 10 per IP per 15 min, 100 per hour in total (429); 503 if mail can't be sent. No captcha (D24) |
 | GET | `/api/auth/email/verify?token=` | A confirmation page. Does not use up the token, so mail scanners can't burn it |
 | POST | `/api/auth/email/verify` | Form field `token`. Single-use, 15 min, same-origin only. Same client handling as the OAuth callback |
 | POST | `/api/auth/token` | `{grant_type:"authorization_code", code, code_verifier}` or `{grant_type:"refresh_token", refresh_token}` → `{access_token, expires_in, refresh_token}` |
@@ -20,8 +20,9 @@ Base URL: `https://<ORBIT_DOMAIN>`. JSON everywhere. Auth uses `Authorization: B
 ### Sessions
 
 - `client` defaults to `web`. `ios` and `desktop` need a PKCE S256 `code_challenge`. `ios` defaults to `orbit://auth/callback`; `desktop` must send its loopback `redirect` (any port).
-- Access tokens last 15 minutes. Refresh tokens rotate on every use and expire 30 days after sign-in. **Using an old one revokes the whole session**, so a client must never refresh twice in parallel.
-- **Web** keeps both tokens in HttpOnly cookies (`orbit_access`, `orbit_refresh`). Every cookie-authenticated mutation, including refresh and logout, must send an `X-Orbit-CSRF` header (any value). Refresh with `{"grant_type":"refresh_token"}`; the response carries only `expires_in`.
+- JSON bodies must be sent as `Content-Type: application/json` (415 otherwise).
+- Access tokens last 15 minutes and stay valid until then, even after logout. Refresh tokens rotate on every use and expire 30 days after sign-in. **Using an old one revokes the whole session**, so a client must never refresh twice in parallel.
+- **Web** keeps both tokens in HttpOnly cookies (`__Host-orbit_access`, `__Host-orbit_refresh`; no prefix on http://localhost). Every cookie-authenticated mutation, including refresh and logout, must send an `X-Orbit-CSRF` header (any value). Refresh with `{"grant_type":"refresh_token"}`; the response carries only `expires_in`.
 
 ## Devices
 

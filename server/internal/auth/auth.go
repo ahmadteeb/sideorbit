@@ -13,6 +13,7 @@ import (
 	"slices"
 	"strings"
 	"time"
+	"unicode"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
@@ -59,6 +60,7 @@ type Service struct {
 
 	mailByAddress *ratelimit.Limiter
 	mailByIP      *ratelimit.Limiter
+	mailTotal     *ratelimit.Limiter // protects the SMTP account's quota and reputation
 }
 
 // New builds the service.
@@ -72,6 +74,7 @@ func New(cfg Config, pool *pgxpool.Pool, log *slog.Logger) *Service {
 		secure:        cfg.PublicURL.Scheme == "https",
 		mailByAddress: ratelimit.New(3, 15*time.Minute),
 		mailByIP:      ratelimit.New(10, 15*time.Minute),
+		mailTotal:     ratelimit.New(100, time.Hour),
 	}
 	for _, p := range cfg.Providers {
 		p.oauth.RedirectURL = cfg.PublicURL.JoinPath("api", "auth", p.name, "callback").String()
@@ -163,27 +166,44 @@ func (s *Service) allowedRedirect(client, raw string) bool {
 	return false
 }
 
+var (
+	errAccountExists = errors.New("an account with this email already exists")
+	errBadEmail      = errors.New("unsupported email address")
+)
+
+// ascii rejects look-alike addresses: lowercasing maps some non-ASCII letters
+// (such as U+0130) onto ASCII ones.
+func ascii(s string) bool {
+	return !strings.ContainsFunc(s, func(r rune) bool { return r > unicode.MaxASCII })
+}
+
 // findOrCreateUser returns the account for a verified identity. A new identity
-// whose verified email matches an existing account is linked to it.
-func (s *Service) findOrCreateUser(ctx context.Context, provider, subject, email, name string) (db.User, error) {
-	email = strings.ToLower(email)
+// joins an existing account with the same email only if it shows control of the
+// mailbox now (D25).
+func (s *Service) findOrCreateUser(ctx context.Context, provider string, id identity) (db.User, error) {
+	if !ascii(id.email) {
+		return db.User{}, errBadEmail
+	}
+	email := strings.ToLower(id.email)
 	var user db.User
 	attempt := func() error {
 		return pgx.BeginFunc(ctx, s.pool, func(tx pgx.Tx) error {
 			q := s.q.WithTx(tx)
 			var err error
-			user, err = q.GetUserByIdentity(ctx, db.GetUserByIdentityParams{Provider: provider, Subject: subject})
+			user, err = q.GetUserByIdentity(ctx, db.GetUserByIdentityParams{Provider: provider, Subject: id.subject})
 			if !errors.Is(err, pgx.ErrNoRows) {
 				return err
 			}
 			user, err = q.GetUserByEmail(ctx, email)
 			if errors.Is(err, pgx.ErrNoRows) {
-				user, err = q.CreateUser(ctx, db.CreateUserParams{ID: newID(), Email: &email, DisplayName: optional(name)})
+				user, err = q.CreateUser(ctx, db.CreateUserParams{ID: newID(), Email: &email, DisplayName: optional(id.name)})
+			} else if err == nil && !id.ownsMailbox {
+				return errAccountExists
 			}
 			if err != nil {
 				return err
 			}
-			return q.CreateIdentity(ctx, db.CreateIdentityParams{ID: newID(), UserID: user.ID, Provider: provider, Subject: subject})
+			return q.CreateIdentity(ctx, db.CreateIdentityParams{ID: newID(), UserID: user.ID, Provider: provider, Subject: id.subject})
 		})
 	}
 	err := attempt()

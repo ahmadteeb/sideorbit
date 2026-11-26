@@ -18,7 +18,11 @@ import (
 
 // normalizeEmail accepts a bare address only and lowercases it.
 func normalizeEmail(s string) (string, bool) {
-	s = strings.ToLower(strings.TrimSpace(s))
+	s = strings.TrimSpace(s)
+	if !ascii(s) {
+		return "", false
+	}
+	s = strings.ToLower(s)
 	a, err := mail.ParseAddress(s)
 	if err != nil || a.Address != s || len(s) > 254 || strings.ContainsAny(s, "\r\n<>") {
 		return "", false
@@ -58,7 +62,7 @@ func (s *Service) emailStart(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	// The IP check comes first so one caller cannot use up another address's quota.
-	if !s.mailByIP.Allow(httpx.ClientIP(r)) || !s.mailByAddress.Allow(email) {
+	if !s.mailByIP.Allow(httpx.ClientIP(r)) || !s.mailByAddress.Allow(email) || !s.mailTotal.Allow("") {
 		s.log.Warn("rate limit hit", "endpoint", "email_start", "email", maskEmail(email))
 		w.Header().Set("Retry-After", "900")
 		httpx.Error(w, http.StatusTooManyRequests, "rate_limited", "Too many sign-in emails.", "Wait 15 minutes, then try again.")
@@ -79,7 +83,7 @@ func (s *Service) emailStart(w http.ResponseWriter, r *http.Request) {
 	body := "Open this link to sign in to Orbit:\n\n" + link.String() +
 		"\n\nIt works once and expires in 15 minutes.\nIf you didn't ask for it, ignore this email.\n"
 	if err := s.cfg.Mailer.Send(r.Context(), email, "Sign in to Orbit", body); err != nil {
-		s.log.Error("could not send sign-in email", "email", maskEmail(email), "err", err)
+		s.log.Error("could not send sign-in email", "email", maskEmail(email), "err", strings.ReplaceAll(err.Error(), email, maskEmail(email)))
 		httpx.Error(w, http.StatusServiceUnavailable, "email_unavailable", "Orbit couldn't send the email.", "Try again in a few minutes.")
 		return
 	}
@@ -108,7 +112,8 @@ var page = template.Must(template.New("page").Parse(`<!doctype html>
 <body>
 <main>
 {{if .Token}}<h1>Sign in to Orbit</h1>
-<p>Continue as <strong>{{.Email}}</strong>. If that isn't your address, close this page.</p>
+<p>Continue as <strong>{{.Email}}</strong> in the <strong>{{.App}}</strong>.</p>
+<p>If that isn't your address, or you didn't just ask for this link there, close this page.</p>
 <form method="post" action="/api/auth/email/verify">
 <input type="hidden" name="token" value="{{.Token}}">
 <button type="submit">Sign in</button>
@@ -119,14 +124,16 @@ var page = template.Must(template.New("page").Parse(`<!doctype html>
 </html>
 `))
 
-func writePage(w http.ResponseWriter, status int, token, email string) {
+var appNames = map[string]string{ClientWeb: "web dashboard", ClientIOS: "Orbit iPhone app", ClientDesktop: "Orbit Setup desktop app"}
+
+func writePage(w http.ResponseWriter, status int, token, email, client string) {
 	h := w.Header()
 	h.Set("Content-Type", "text/html; charset=utf-8")
 	h.Set("Content-Security-Policy", pageCSP)
 	h.Set("Referrer-Policy", "same-origin") // the token is in the URL
 	h.Set("Cache-Control", "no-store")
 	w.WriteHeader(status)
-	_ = page.Execute(w, struct{ Token, Email string }{token, email})
+	_ = page.Execute(w, struct{ Token, Email, App string }{token, email, appNames[client]})
 }
 
 // emailConfirm only shows a button. Mail scanners open links, and a GET that
@@ -134,15 +141,15 @@ func writePage(w http.ResponseWriter, status int, token, email string) {
 func (s *Service) emailConfirm(w http.ResponseWriter, r *http.Request) {
 	token := r.URL.Query().Get("token")
 	code, err := s.q.PeekLoginCode(r.Context(), db.PeekLoginCodeParams{CodeHash: hashToken(token), Purpose: purposeMagic})
-	if errors.Is(err, pgx.ErrNoRows) || (err == nil && code.Email == nil) {
-		writePage(w, http.StatusBadRequest, "", "")
+	if errors.Is(err, pgx.ErrNoRows) || (err == nil && (code.Email == nil || code.Client == nil)) {
+		writePage(w, http.StatusBadRequest, "", "", "")
 		return
 	}
 	if err != nil {
 		httpx.Internal(w, r, err)
 		return
 	}
-	writePage(w, http.StatusOK, token, *code.Email)
+	writePage(w, http.StatusOK, token, *code.Email, *code.Client)
 }
 
 func (s *Service) emailVerify(w http.ResponseWriter, r *http.Request) {
@@ -150,14 +157,14 @@ func (s *Service) emailVerify(w http.ResponseWriter, r *http.Request) {
 	code, err := s.q.ConsumeLoginCode(r.Context(), db.ConsumeLoginCodeParams{CodeHash: hashToken(r.PostFormValue("token")), Purpose: purposeMagic})
 	if errors.Is(err, pgx.ErrNoRows) || (err == nil && (code.Email == nil || code.Client == nil)) {
 		s.log.Warn("sign-in refused", "provider", "email", "reason", "link")
-		writePage(w, http.StatusBadRequest, "", "")
+		writePage(w, http.StatusBadRequest, "", "", "")
 		return
 	}
 	if err != nil {
 		httpx.Internal(w, r, err)
 		return
 	}
-	user, err := s.findOrCreateUser(r.Context(), "email", *code.Email, *code.Email, "")
+	user, err := s.findOrCreateUser(r.Context(), "email", identity{subject: *code.Email, email: *code.Email, ownsMailbox: true})
 	if err != nil {
 		httpx.Internal(w, r, err)
 		return

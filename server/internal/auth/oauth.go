@@ -9,6 +9,7 @@ import (
 	"io"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -26,6 +27,9 @@ const (
 // identity is a verified account at a provider.
 type identity struct {
 	subject, email, name string
+	// ownsMailbox: the provider runs the mailbox, so "verified" means now and
+	// not merely at some point in the past.
+	ownsMailbox bool
 }
 
 // Provider is one OAuth login option.
@@ -103,7 +107,7 @@ func githubIdentity(ctx context.Context, c *http.Client, api string) (identity, 
 	}
 	for _, e := range emails {
 		if e.Primary && e.Verified && e.Email != "" {
-			return identity{strconv.FormatInt(user.ID, 10), e.Email, name}, nil
+			return identity{subject: strconv.FormatInt(user.ID, 10), email: e.Email, name: name}, nil
 		}
 	}
 	return identity{}, errNoVerifiedEmail
@@ -115,6 +119,7 @@ func googleIdentity(ctx context.Context, c *http.Client, api string) (identity, 
 		Email         string `json:"email"`
 		EmailVerified bool   `json:"email_verified"`
 		Name          string `json:"name"`
+		HostedDomain  string `json:"hd"` // Google Workspace
 	}
 	if err := getJSON(ctx, c, api+"/v1/userinfo", &user); err != nil {
 		return identity{}, err
@@ -125,7 +130,9 @@ func googleIdentity(ctx context.Context, c *http.Client, api string) (identity, 
 	if !user.EmailVerified || user.Email == "" {
 		return identity{}, errNoVerifiedEmail
 	}
-	return identity{user.Sub, user.Email, user.Name}, nil
+	_, domain, _ := strings.Cut(strings.ToLower(user.Email), "@")
+	owns := domain == "gmail.com" || (user.HostedDomain != "" && strings.EqualFold(user.HostedDomain, domain))
+	return identity{subject: user.Sub, email: user.Email, name: user.Name, ownsMailbox: owns}, nil
 }
 
 func (s *Service) oauthStart(w http.ResponseWriter, r *http.Request) {
@@ -149,7 +156,7 @@ func (s *Service) oauthStart(w http.ResponseWriter, r *http.Request) {
 		httpx.Internal(w, r, err)
 		return
 	}
-	http.SetCookie(w, s.cookie(cookieState, signed, "/api/auth", time.Now().Add(stateTTL)))
+	http.SetCookie(w, s.cookie(cookieState, signed, time.Now().Add(stateTTL)))
 	w.Header().Set("Cache-Control", "no-store")
 	http.Redirect(w, r, p.oauth.AuthCodeURL(state, oauth2.S256ChallengeOption(verifier)), http.StatusFound)
 }
@@ -164,7 +171,7 @@ func (s *Service) oauthCallback(w http.ResponseWriter, r *http.Request) {
 		s.log.Warn("sign-in refused", "provider", p.name, "reason", "state")
 		httpx.Error(w, http.StatusBadRequest, "invalid_state", "This sign-in attempt expired or didn't start here.", "Start signing in again.")
 	}
-	cookie, err := r.Cookie(cookieState)
+	cookie, err := r.Cookie(s.cookieName(cookieState))
 	if err != nil {
 		badState()
 		return
@@ -174,7 +181,7 @@ func (s *Service) oauthCallback(w http.ResponseWriter, r *http.Request) {
 		badState()
 		return
 	}
-	clear := s.cookie(cookieState, "", "/api/auth", time.Unix(0, 0))
+	clear := s.cookie(cookieState, "", time.Unix(0, 0))
 	clear.MaxAge = -1
 	http.SetCookie(w, clear)
 	t := target{client: st.Client, challenge: st.Challenge, redirect: st.Redirect}
@@ -214,7 +221,15 @@ func (s *Service) oauthCallback(w http.ResponseWriter, r *http.Request) {
 		fail("provider_error", err)
 		return
 	}
-	user, err := s.findOrCreateUser(r.Context(), p.name, id.subject, id.email, id.name)
+	user, err := s.findOrCreateUser(r.Context(), p.name, id)
+	if errors.Is(err, errAccountExists) {
+		fail("account_exists", err)
+		return
+	}
+	if errors.Is(err, errBadEmail) {
+		fail("email_unverified", err)
+		return
+	}
 	if err != nil {
 		httpx.Internal(w, r, err)
 		return

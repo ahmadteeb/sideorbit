@@ -120,20 +120,37 @@ func (s *Service) issue(ctx context.Context, q *db.Queries, userID, family uuid.
 
 var errInvalidGrant = errors.New("invalid grant")
 
-// rotate exchanges a refresh token for a new pair. Presenting a token that was
-// already used means it leaked, so the whole family is revoked.
-func (s *Service) rotate(ctx context.Context, refresh, wantClient string) (tokenPair, error) {
-	var pair tokenPair
-	reused := false
-	err := pgx.BeginFunc(ctx, s.pool, func(tx pgx.Tx) error {
+// withSession runs fn on a refresh token with its account locked. Without the
+// lock, a rotation committing during a revocation would insert a token that the
+// revocation never sees. Each statement after the lock reads a fresh snapshot.
+func (s *Service) withSession(ctx context.Context, refresh string, fn func(*db.Queries, db.LockRefreshTokenRow) error) error {
+	hash := hashToken(refresh)
+	return pgx.BeginFunc(ctx, s.pool, func(tx pgx.Tx) error {
 		q := s.q.WithTx(tx)
-		row, err := q.LockRefreshToken(ctx, hashToken(refresh))
+		owner, err := q.GetRefreshTokenOwner(ctx, hash)
+		if err == nil {
+			_, err = q.LockUser(ctx, owner)
+		}
+		var row db.LockRefreshTokenRow
+		if err == nil {
+			row, err = q.LockRefreshToken(ctx, hash)
+		}
 		if errors.Is(err, pgx.ErrNoRows) {
 			return errInvalidGrant
 		}
 		if err != nil {
 			return err
 		}
+		return fn(q, row)
+	})
+}
+
+// rotate exchanges a refresh token for a new pair. Presenting a token that was
+// already used means it leaked, so the whole family is revoked.
+func (s *Service) rotate(ctx context.Context, refresh, wantClient string) (tokenPair, error) {
+	var pair tokenPair
+	reused := false
+	err := s.withSession(ctx, refresh, func(q *db.Queries, row db.LockRefreshTokenRow) error {
 		// A web token is only good from the cookie and a native token only
 		// from the body.
 		if row.RevokedAt != nil || row.Expired || (row.Client == ClientWeb) != (wantClient == ClientWeb) {
@@ -148,6 +165,7 @@ func (s *Service) rotate(ctx context.Context, refresh, wantClient string) (token
 			return err
 		}
 		// The new token keeps the family's expiry: 30 days is absolute.
+		var err error
 		pair, err = s.issue(ctx, q, row.UserID, row.FamilyID, row.Client, row.ExpiresAt)
 		return err
 	})
@@ -202,7 +220,7 @@ func (s *Service) token(w http.ResponseWriter, r *http.Request) {
 		refresh, wantClient := req.RefreshToken, ClientIOS
 		fromCookie := refresh == ""
 		if fromCookie {
-			c, err := r.Cookie(cookieRefresh)
+			c, err := r.Cookie(s.cookieName(cookieRefresh))
 			if err != nil || r.Header.Get(csrfHeader) == "" {
 				invalid()
 				return
@@ -241,42 +259,56 @@ func (s *Service) logout(w http.ResponseWriter, r *http.Request) {
 	if r.ContentLength != 0 && !httpx.Decode(w, r, &req) {
 		return
 	}
-	refresh := req.RefreshToken
+	refresh, fromCookie := req.RefreshToken, false
 	if refresh == "" {
-		if c, err := r.Cookie(cookieRefresh); err == nil {
+		if c, err := r.Cookie(s.cookieName(cookieRefresh)); err == nil {
 			if r.Header.Get(csrfHeader) == "" {
 				httpx.Error(w, http.StatusForbidden, "csrf", "Missing "+csrfHeader+" header.", "")
 				return
 			}
-			refresh = c.Value
-			s.clearSessionCookies(w)
+			refresh, fromCookie = c.Value, true
 		}
 	}
 	if refresh != "" {
-		if err := s.q.RevokeFamilyByTokenHash(r.Context(), hashToken(refresh)); err != nil {
+		err := s.withSession(r.Context(), refresh, func(q *db.Queries, row db.LockRefreshTokenRow) error {
+			s.log.Info("signed out", "user_id", row.UserID)
+			return q.RevokeFamily(r.Context(), row.FamilyID)
+		})
+		if err != nil && !errors.Is(err, errInvalidGrant) {
 			httpx.Internal(w, r, err)
 			return
 		}
-		s.log.Info("signed out")
+	}
+	if fromCookie {
+		s.clearSessionCookies(w)
 	}
 	w.WriteHeader(http.StatusNoContent)
 }
 
-func (s *Service) cookie(name, value, path string, expires time.Time) *http.Cookie {
+// cookieName adds the __Host- prefix over HTTPS, which the browser only accepts
+// from this exact host with Path=/.
+func (s *Service) cookieName(base string) string {
+	if s.secure {
+		return "__Host-" + base
+	}
+	return base
+}
+
+func (s *Service) cookie(base, value string, expires time.Time) *http.Cookie {
 	return &http.Cookie{
-		Name: name, Value: value, Path: path, Expires: expires,
+		Name: s.cookieName(base), Value: value, Path: "/", Expires: expires,
 		HttpOnly: true, Secure: s.secure, SameSite: http.SameSiteLaxMode,
 	}
 }
 
 func (s *Service) setSessionCookies(w http.ResponseWriter, p tokenPair) {
-	http.SetCookie(w, s.cookie(cookieAccess, p.AccessToken, "/", time.Now().Add(s.cfg.AccessTTL)))
-	http.SetCookie(w, s.cookie(cookieRefresh, p.RefreshToken, "/api/auth", p.refreshExpires))
+	http.SetCookie(w, s.cookie(cookieAccess, p.AccessToken, time.Now().Add(s.cfg.AccessTTL)))
+	http.SetCookie(w, s.cookie(cookieRefresh, p.RefreshToken, p.refreshExpires))
 }
 
 func (s *Service) clearSessionCookies(w http.ResponseWriter) {
-	for name, path := range map[string]string{cookieAccess: "/", cookieRefresh: "/api/auth"} {
-		c := s.cookie(name, "", path, time.Unix(0, 0))
+	for _, name := range []string{cookieAccess, cookieRefresh} {
+		c := s.cookie(name, "", time.Unix(0, 0))
 		c.MaxAge = -1
 		http.SetCookie(w, c)
 	}
@@ -334,7 +366,7 @@ func (s *Service) RequireUser(next http.Handler) http.Handler {
 		w.Header().Set("Cache-Control", "no-store")
 		token := BearerToken(r)
 		if token == "" {
-			if c, err := r.Cookie(cookieAccess); err == nil {
+			if c, err := r.Cookie(s.cookieName(cookieAccess)); err == nil {
 				safe := r.Method == http.MethodGet || r.Method == http.MethodHead || r.Method == http.MethodOptions
 				if !safe && r.Header.Get(csrfHeader) == "" {
 					httpx.Error(w, http.StatusForbidden, "csrf", "Missing "+csrfHeader+" header.", "")

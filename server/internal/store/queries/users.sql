@@ -1,6 +1,9 @@
 -- name: GetActiveUser :one
 SELECT * FROM users WHERE id = $1 AND deleted_at IS NULL;
 
+-- name: LockUser :one
+SELECT id FROM users WHERE id = $1 AND deleted_at IS NULL FOR UPDATE;
+
 -- name: GetUserByEmail :one
 SELECT * FROM users WHERE email = sqlc.arg(email)::citext AND deleted_at IS NULL;
 

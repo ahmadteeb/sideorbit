@@ -119,6 +119,17 @@ func (q *Queries) DeleteUserRefreshTokens(ctx context.Context, userID uuid.UUID)
 	return err
 }
 
+const getRefreshTokenOwner = `-- name: GetRefreshTokenOwner :one
+SELECT user_id FROM refresh_tokens WHERE token_hash = $1
+`
+
+func (q *Queries) GetRefreshTokenOwner(ctx context.Context, tokenHash []byte) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, getRefreshTokenOwner, tokenHash)
+	var user_id uuid.UUID
+	err := row.Scan(&user_id)
+	return user_id, err
+}
+
 const lockRefreshToken = `-- name: LockRefreshToken :one
 SELECT id, user_id, family_id, token_hash, client, expires_at, used_at, revoked_at, created_at, (expires_at <= now())::boolean AS expired
 FROM refresh_tokens WHERE token_hash = $1 FOR UPDATE
@@ -197,15 +208,5 @@ UPDATE refresh_tokens SET revoked_at = now() WHERE family_id = $1 AND revoked_at
 
 func (q *Queries) RevokeFamily(ctx context.Context, familyID uuid.UUID) error {
 	_, err := q.db.Exec(ctx, revokeFamily, familyID)
-	return err
-}
-
-const revokeFamilyByTokenHash = `-- name: RevokeFamilyByTokenHash :exec
-UPDATE refresh_tokens SET revoked_at = now()
-WHERE family_id IN (SELECT r.family_id FROM refresh_tokens r WHERE r.token_hash = $1) AND revoked_at IS NULL
-`
-
-func (q *Queries) RevokeFamilyByTokenHash(ctx context.Context, tokenHash []byte) error {
-	_, err := q.db.Exec(ctx, revokeFamilyByTokenHash, tokenHash)
 	return err
 }

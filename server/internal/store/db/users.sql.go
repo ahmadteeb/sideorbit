@@ -182,3 +182,14 @@ func (q *Queries) ListProviders(ctx context.Context, userID uuid.UUID) ([]string
 	}
 	return items, nil
 }
+
+const lockUser = `-- name: LockUser :one
+SELECT id FROM users WHERE id = $1 AND deleted_at IS NULL FOR UPDATE
+`
+
+func (q *Queries) LockUser(ctx context.Context, id uuid.UUID) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, lockUser, id)
+	var id_2 uuid.UUID
+	err := row.Scan(&id_2)
+	return id_2, err
+}

@@ -2,6 +2,9 @@
 INSERT INTO refresh_tokens (id, user_id, family_id, token_hash, client, expires_at)
 VALUES ($1, $2, $3, $4, $5, $6);
 
+-- name: GetRefreshTokenOwner :one
+SELECT user_id FROM refresh_tokens WHERE token_hash = $1;
+
 -- name: LockRefreshToken :one
 SELECT *, (expires_at <= now())::boolean AS expired
 FROM refresh_tokens WHERE token_hash = $1 FOR UPDATE;
@@ -11,10 +14,6 @@ UPDATE refresh_tokens SET used_at = now() WHERE id = $1;
 
 -- name: RevokeFamily :exec
 UPDATE refresh_tokens SET revoked_at = now() WHERE family_id = $1 AND revoked_at IS NULL;
-
--- name: RevokeFamilyByTokenHash :exec
-UPDATE refresh_tokens SET revoked_at = now()
-WHERE family_id IN (SELECT r.family_id FROM refresh_tokens r WHERE r.token_hash = $1) AND revoked_at IS NULL;
 
 -- name: DeleteUserRefreshTokens :exec
 DELETE FROM refresh_tokens WHERE user_id = $1;

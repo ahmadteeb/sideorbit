@@ -16,6 +16,7 @@ func TestDecode(t *testing.T) {
 		{"unknown field", `{"name":"a","extra":1}`, http.StatusBadRequest},
 		{"trailing data", `{"name":"a"}{}`, http.StatusBadRequest},
 		{"not json", `name=a`, http.StatusBadRequest},
+		{"cross-site form type", `{"name":"a"}`, http.StatusUnsupportedMediaType},
 		{"too large", `{"name":"` + strings.Repeat("a", MaxBody) + `"}`, http.StatusRequestEntityTooLarge},
 	}
 	for _, tt := range tests {
@@ -24,7 +25,12 @@ func TestDecode(t *testing.T) {
 			var v struct {
 				Name string `json:"name"`
 			}
-			ok := Decode(rec, httptest.NewRequest(http.MethodPost, "/", strings.NewReader(tt.body)), &v)
+			r := httptest.NewRequest(http.MethodPost, "/", strings.NewReader(tt.body))
+			r.Header.Set("Content-Type", "application/json; charset=utf-8")
+			if tt.name == "cross-site form type" {
+				r.Header.Set("Content-Type", "text/plain")
+			}
+			ok := Decode(rec, r, &v)
 			if rec.Code != tt.wantStatus || ok != (tt.wantStatus == http.StatusOK) {
 				t.Errorf("status = %d ok = %v", rec.Code, ok)
 			}

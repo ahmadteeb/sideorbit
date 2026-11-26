@@ -44,6 +44,7 @@ func run() error {
 		Addr:              cfg.httpAddr,
 		Handler:           newRouter(log, db.Ping, anisetteCheck(cfg.anisetteURL), auth.New(cfg.auth, db, log)),
 		ReadHeaderTimeout: 10 * time.Second,
+		ReadTimeout:       30 * time.Second,
 		IdleTimeout:       2 * time.Minute,
 	}
 	failed := make(chan error, 1)

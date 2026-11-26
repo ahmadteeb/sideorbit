@@ -15,11 +15,11 @@ Each phase is one PR (or a few sub-PRs) with a slash command in `.claude/command
 
 ## Phase 1: Backend + deployment ◐  → `/phase-1`
 - [x] `server/`: config (env), slog, health (`/healthz`, `/readyz`), Postgres + goose migrations from `DATA_MODEL.md`
-- [ ] Auth: GitHub + Google OAuth (PKCE, `state`), email magic link (SMTP, 15-min single-use hashed token), JWT access + rotating refresh tokens, iOS one-time-code exchange (`orbit://auth/callback`)
+- [x] Auth: GitHub + Google OAuth (PKCE, `state`), email magic link (SMTP, 15-min single-use hashed token), JWT access + rotating refresh tokens, iOS one-time-code exchange (`orbit://auth/callback`)
 - [ ] Devices, apps, refresh events, sources CRUD per `API.md`
 - [ ] **Anisette gateway**: proxy `/anisette/v3/client_info`, `/anisette/v3/get_headers`, `/anisette/v3/provisioning_session` (WebSocket) to the internal anisette container; bearer auth; per-user + per-IP rate limits; metadata-only logs
 - [ ] Web push: VAPID keys, subscription storage, a sender with expiry/backoff, test endpoint
-- [ ] Scheduler: expiry thresholds (24h / 6h), device-silent (48h), deduplicated via `alerts_sent`
+- [ ] Scheduler: expiry thresholds (24h / 6h), device-silent (48h), deduplicated via `alerts_sent`; prune expired login codes, refresh tokens and old events
 - [ ] `deploy/`: compose with caddy + server + postgres + anisette; `.env.example`; backup script
 - [ ] Tests: handlers (table-driven), auth flows (httptest + fake OAuth provider), gateway (WebSocket proxy test)
 - [x] Resolve **P07** (abuse controls): D24
