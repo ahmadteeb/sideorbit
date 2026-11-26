@@ -17,6 +17,8 @@ jobs:
           persist-credentials: false
       - name: OrbitTheme.swift matches the design system copy
         run: diff design-system/orbit/OrbitTheme.swift ios/Orbit/DesignSystem/OrbitTheme.swift
+      - name: Unit tests (OrbitKit)
+        run: swift test --package-path ios/Packages/OrbitKit
       - run: brew install xcodegen
       - run: xcodegen generate
         working-directory: ios
