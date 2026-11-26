@@ -32,6 +32,7 @@ type Device struct {
 	PairingOk        *bool
 	LastSeenAt       *time.Time
 	CreatedAt        time.Time
+	LastReportAt     *time.Time
 }
 
 type DeviceApp struct {

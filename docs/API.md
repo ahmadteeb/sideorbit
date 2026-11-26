@@ -28,8 +28,8 @@ Base URL: `https://<ORBIT_DOMAIN>`. JSON everywhere. Auth uses `Authorization: B
 
 | Method | Path | Body / notes |
 |---|---|---|
-| GET | `/api/devices` | List |
-| POST | `/api/devices` | `{name, model, ios_version, client_id}` → device. `client_id` = the anisette v3 client identifier (opaque) |
+| GET | `/api/devices` | `{devices:[…]}` |
+| POST | `/api/devices` | `{name, model, ios_version, client_id}` → 201 device. `client_id` = the anisette v3 client identifier (opaque). The same `client_id` again → 200 with the existing device. 403 `device_limit` at the cap, 409 `client_id_in_use` if another account has it |
 | PATCH | `/api/devices/{id}` | `{name}` |
 | DELETE | `/api/devices/{id}` | Removes the device and its history |
 | POST | `/api/devices/{id}/report` | Status report from the app (below) |
@@ -51,13 +51,20 @@ Base URL: `https://<ORBIT_DOMAIN>`. JSON everywhere. Auth uses `Authorization: B
 ```
 The server **must reject** any field it doesn't know (`DisallowUnknownFields`) so credentials can't be added by accident. `label` is masked on the device before sending.
 
+→ 204. Only `reported_at` is required (within the last 90 days; at most 10 minutes ahead). Limits: 60 reports/min per user, 100 apps.
+- `apps` present replaces the inventory (an empty list clears it); absent leaves it unchanged.
+- A report older than the newest one already received only adds its event to history. Resending a report adds nothing.
+- `label` must be masked (at least `***`, at most 4 visible characters before `@`). `error_code` is `UPPER_SNAKE_CASE`, never free text. `source_url` is https without credentials. `trigger` may also be `setup`.
+
 ## Apps, events, sources
 
 | Method | Path | Notes |
 |---|---|---|
 | GET | `/api/devices/{id}/apps` | Latest inventory |
-| GET | `/api/events?device_id=&result=&cursor=` | Paginated, newest first |
-| GET/POST/DELETE | `/api/sources` | Saved AltStore-format source URLs per user. POST validates by fetching (timeout 5s, max 2 MB, https only, SSRF-safe resolver) |
+| GET | `/api/events?device_id=&result=&cursor=` | `{events:[…], next_cursor}`, newest first, 50 per page |
+| GET | `/api/sources` | `{sources:[{id,url,name,created_at}]}` |
+| POST | `/api/sources` | `{url}`. Validates by fetching (timeout 5s, max 2 MB, https only, SSRF-safe resolver). 10/min and 50 saved per user |
+| DELETE | `/api/sources/{id}` | 204 |
 
 ## Web push
 

@@ -12,7 +12,11 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/ahmadteeb/sideorbit/server/internal/apps"
 	"github.com/ahmadteeb/sideorbit/server/internal/auth"
+	"github.com/ahmadteeb/sideorbit/server/internal/devices"
+	"github.com/ahmadteeb/sideorbit/server/internal/events"
+	"github.com/ahmadteeb/sideorbit/server/internal/safehttp"
 	"github.com/ahmadteeb/sideorbit/server/internal/store"
 )
 
@@ -40,9 +44,16 @@ func run() error {
 	}
 	defer db.Close()
 
+	accounts := auth.New(cfg.auth, db, log)
+	handler := newRouter(log, db.Ping, anisetteCheck(cfg.anisetteURL),
+		accounts,
+		devices.New(db, log, accounts.RequireUser, cfg.auth.MaxDevices),
+		apps.New(db, log, accounts.RequireUser, safehttp.New(5*time.Second)),
+		events.New(db, accounts.RequireUser),
+	)
 	srv := &http.Server{
 		Addr:              cfg.httpAddr,
-		Handler:           newRouter(log, db.Ping, anisetteCheck(cfg.anisetteURL), auth.New(cfg.auth, db, log)),
+		Handler:           handler,
 		ReadHeaderTimeout: 10 * time.Second,
 		ReadTimeout:       30 * time.Second,
 		IdleTimeout:       2 * time.Minute,
