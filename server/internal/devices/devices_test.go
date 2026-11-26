@@ -179,6 +179,7 @@ func TestReportRejects(t *testing.T) {
 		{"unmasked label", with(`"apple_account":{"label":"john.smith@icloud.com"}`)},
 		{"barely masked label", with(`"apple_account":{"label":"john***smith@icloud.com"}`)},
 		{"free-text error", with(`"event":{"kind":"refresh","result":"failure","error_code":"bad password for john"}`)},
+		{"text after the mask", with(`"apple_account":{"label":"***@my secret words"}`)},
 		{"bad team id", with(`"apple_account":{"team_id":"abc"}`)},
 		{"bad kind", with(`"event":{"kind":"steal","result":"success"}`)},
 		{"bad result", with(`"event":{"kind":"refresh","result":"success|failure"}`)},

@@ -118,7 +118,9 @@ func (s *Service) issue(ctx context.Context, q *db.Queries, userID, family uuid.
 	return tokenPair{access, int(s.cfg.AccessTTL / time.Second), refresh, expires}, nil
 }
 
-var errInvalidGrant = errors.New("invalid grant")
+// ErrInvalidToken means a token or grant was refused, as opposed to a server
+// failure.
+var ErrInvalidToken = errors.New("invalid grant")
 
 // withSession runs fn on a refresh token with its account locked. Without the
 // lock, a rotation committing during a revocation would insert a token that the
@@ -136,7 +138,7 @@ func (s *Service) withSession(ctx context.Context, refresh string, fn func(*db.Q
 			row, err = q.LockRefreshToken(ctx, hash)
 		}
 		if errors.Is(err, pgx.ErrNoRows) {
-			return errInvalidGrant
+			return ErrInvalidToken
 		}
 		if err != nil {
 			return err
@@ -154,7 +156,7 @@ func (s *Service) rotate(ctx context.Context, refresh, wantClient string) (token
 		// A web token is only good from the cookie and a native token only
 		// from the body.
 		if row.RevokedAt != nil || row.Expired || (row.Client == ClientWeb) != (wantClient == ClientWeb) {
-			return errInvalidGrant
+			return ErrInvalidToken
 		}
 		if row.UsedAt != nil {
 			reused = true
@@ -170,7 +172,7 @@ func (s *Service) rotate(ctx context.Context, refresh, wantClient string) (token
 		return err
 	})
 	if err == nil && reused {
-		err = errInvalidGrant
+		err = ErrInvalidToken
 	}
 	return pair, err
 }
@@ -228,7 +230,7 @@ func (s *Service) token(w http.ResponseWriter, r *http.Request) {
 			refresh, wantClient = c.Value, ClientWeb
 		}
 		pair, err := s.rotate(r.Context(), refresh, wantClient)
-		if errors.Is(err, errInvalidGrant) {
+		if errors.Is(err, ErrInvalidToken) {
 			if fromCookie {
 				s.clearSessionCookies(w)
 			}
@@ -274,7 +276,7 @@ func (s *Service) logout(w http.ResponseWriter, r *http.Request) {
 			s.log.Info("signed out", "user_id", row.UserID)
 			return q.RevokeFamily(r.Context(), row.FamilyID)
 		})
-		if err != nil && !errors.Is(err, errInvalidGrant) {
+		if err != nil && !errors.Is(err, ErrInvalidToken) {
 			httpx.Internal(w, r, err)
 			return
 		}
@@ -326,15 +328,15 @@ func UserID(ctx context.Context) uuid.UUID {
 func (s *Service) Authenticate(ctx context.Context, accessToken string) (uuid.UUID, error) {
 	c, err := s.parse(accessToken, audAccess)
 	if err != nil {
-		return uuid.Nil, errInvalidGrant
+		return uuid.Nil, ErrInvalidToken
 	}
 	id, err := uuid.Parse(c.Subject)
 	if err != nil {
-		return uuid.Nil, errInvalidGrant
+		return uuid.Nil, ErrInvalidToken
 	}
 	// A deleted account must stop working before its token expires.
 	if _, err := s.q.GetActiveUser(ctx, id); errors.Is(err, pgx.ErrNoRows) {
-		return uuid.Nil, errInvalidGrant
+		return uuid.Nil, ErrInvalidToken
 	} else if err != nil {
 		return uuid.Nil, err
 	}
@@ -343,7 +345,7 @@ func (s *Service) Authenticate(ctx context.Context, accessToken string) (uuid.UU
 
 // IsInvalidToken reports whether Authenticate refused the token, as opposed to
 // failing for a server reason.
-func IsInvalidToken(err error) bool { return errors.Is(err, errInvalidGrant) }
+func IsInvalidToken(err error) bool { return errors.Is(err, ErrInvalidToken) }
 
 // BearerToken returns the Authorization bearer token, or "".
 func BearerToken(r *http.Request) string {
