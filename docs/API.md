@@ -8,7 +8,7 @@ Base URL: `https://<ORBIT_DOMAIN>`. JSON everywhere. Auth uses `Authorization: B
 |---|---|---|
 | GET | `/api/auth/{github\|google}/start?client=web\|ios\|desktop&code_challenge=&redirect=` | Sets the `state` cookie and redirects to the provider |
 | GET | `/api/auth/{provider}/callback` | Web: sets the session and redirects to `/`. ios/desktop: redirects to `orbit://auth/callback?code=` / `http://127.0.0.1:<port>/callback?code=` |
-| POST | `/api/auth/email/start` | `{email}` → always 202 (no account enumeration). Rate-limited, captcha optional (P07) |
+| POST | `/api/auth/email/start` | `{email}` → always 202 (no account enumeration). Rate-limited; no captcha (D24) |
 | GET | `/api/auth/email/verify?token=` | Single-use, 15 min. Same client handling as the OAuth callback |
 | POST | `/api/auth/token` | `{grant_type:"authorization_code", code, code_verifier}` or `{grant_type:"refresh_token", refresh_token}` → `{access_token, expires_in, refresh_token}` |
 | POST | `/api/auth/logout` | Revokes the refresh token family |

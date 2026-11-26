@@ -39,6 +39,8 @@ CREATE TABLE login_codes (                      -- one-time codes (oauth→app e
   purpose       text NOT NULL CHECK (purpose IN ('app_exchange','magic_link')),
   code_challenge text,                          -- PKCE S256 for app_exchange
   email         citext,                         -- for magic_link before user exists
+  client        text CHECK (client IN ('web','ios','desktop')),
+  redirect      text,                           -- allowlisted native redirect
   expires_at    timestamptz NOT NULL,
   used_at       timestamptz
 );
