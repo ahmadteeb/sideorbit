@@ -98,4 +98,4 @@ Limits (defaults, configurable): 60 requests/min per user across `client_info` a
 
 ## Health
 
-`GET /healthz` (process up) · `GET /readyz` (DB + anisette reachable) · `GET /metrics` (Prometheus; restrict to the internal network)
+`GET /healthz` (process up) · `GET /readyz` (`{db, anisette}`, 503 if either is down; result reused for 5 s) · `GET /metrics` arrives in Phase 6 (Caddy already hides it)

@@ -39,6 +39,18 @@ func TestRouter(t *testing.T) {
 	}
 }
 
+func TestReadyzReusesResult(t *testing.T) {
+	calls := 0
+	count := func(context.Context) error { calls++; return nil }
+	h := newRouter(slog.New(slog.DiscardHandler), count, count)
+	for range 20 {
+		h.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest(http.MethodGet, "/readyz", nil))
+	}
+	if calls != 2 {
+		t.Errorf("%d dependency checks for 20 requests, want 2", calls)
+	}
+}
+
 func TestRequestLoggerOmitsQueryString(t *testing.T) {
 	var out strings.Builder
 	up := func(context.Context) error { return nil }

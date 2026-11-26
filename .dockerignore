@@ -1,0 +1,9 @@
+# Only what the server image needs; this keeps deploy/.env and keys out of the build.
+*
+!LICENSE
+!NOTICE
+!server
+**/*_test.go
+**/.env*
+**/*.pem
+**/*.key

@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"net/http"
 	"net/url"
+	"sync"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -58,21 +59,37 @@ func requestLogger(log *slog.Logger) func(http.Handler) http.Handler {
 	}
 }
 
+// readyzTTL is how long a readiness result is reused. The endpoint is public, so
+// a flood must not turn into the same flood against the database and anisette.
+const readyzTTL = 5 * time.Second
+
 // readyz answers 503 if any dependency is down. Causes are logged, not returned.
 func readyz(log *slog.Logger, db, anisette check) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		status := http.StatusOK
-		run := func(name string, c check) string {
-			ctx, cancel := context.WithTimeout(r.Context(), 2*time.Second)
-			defer cancel()
-			if err := c(ctx); err != nil {
-				log.Warn("not ready", "dependency", name, "err", err)
-				status = http.StatusServiceUnavailable
-				return "error"
+	var (
+		mu      sync.Mutex
+		checked time.Time
+		status  int
+		body    map[string]string
+	)
+	return func(w http.ResponseWriter, _ *http.Request) {
+		mu.Lock()
+		defer mu.Unlock()
+		if time.Since(checked) >= readyzTTL {
+			status = http.StatusOK
+			run := func(name string, c check) string {
+				// Not the request's context: the result is shared.
+				ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+				defer cancel()
+				if err := c(ctx); err != nil {
+					log.Warn("not ready", "dependency", name, "err", err)
+					status = http.StatusServiceUnavailable
+					return "error"
+				}
+				return "ok"
 			}
-			return "ok"
+			body = map[string]string{"db": run("db", db), "anisette": run("anisette", anisette)}
+			checked = time.Now()
 		}
-		body := map[string]string{"db": run("db", db), "anisette": run("anisette", anisette)}
 		httpx.JSON(w, status, body)
 	}
 }

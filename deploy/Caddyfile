@@ -1,5 +1,17 @@
 {
 	email {$ACME_EMAIL}
+
+	# Error logs include request headers. Caddy redacts Authorization and Cookie
+	# itself, but WebSocket clients may carry their token in this one.
+	log default {
+		format filter {
+			wrap json
+			fields {
+				request>headers>Sec-Websocket-Protocol delete
+				resp_headers>Sec-Websocket-Protocol delete
+			}
+		}
+	}
 }
 
 {$ORBIT_DOMAIN} {
@@ -8,6 +20,10 @@
 	# Never expose internal metrics publicly
 	@metrics path /metrics
 	respond @metrics 404
+
+	request_body {
+		max_size 1MB
+	}
 
 	header {
 		Strict-Transport-Security "max-age=31536000; includeSubDomains"
