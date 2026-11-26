@@ -265,14 +265,14 @@ struct AppDetailView: View {
 
 #Preview("Dark") {
     NavigationStack {
-        BrowseView(model: .preview)
+        BrowseView(model: .sample)
     }
     .preferredColorScheme(.dark)
 }
 
 #Preview("Largest text") {
     NavigationStack {
-        BrowseView(model: .preview)
+        BrowseView(model: .sample)
     }
     .environment(\.dynamicTypeSize, .accessibility5)
 }

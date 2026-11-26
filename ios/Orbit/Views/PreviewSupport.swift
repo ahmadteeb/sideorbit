@@ -14,7 +14,8 @@ private struct PreviewStore: TokenStore {
 }
 
 extension BrowseModel {
-    static var preview: BrowseModel {
+    // Not "preview": that is already a property of this model.
+    static var sample: BrowseModel {
         BrowseModel(client: { nil }, sessionEnded: {})
     }
 }
