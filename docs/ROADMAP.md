@@ -20,11 +20,13 @@ Each phase is one PR (or a few sub-PRs) with a slash command in `.claude/command
 - [x] **Anisette gateway**: proxy `/anisette/v3/client_info`, `/anisette/v3/get_headers`, `/anisette/v3/provisioning_session` (WebSocket) to the internal anisette container; bearer auth; per-user + per-IP rate limits; metadata-only logs
 - [x] Web push: VAPID keys, subscription storage, a sender with expiry/backoff, test endpoint
 - [x] Scheduler: expiry thresholds (24h / 6h), device-silent (48h), deduplicated via `alerts_sent`; prune expired login codes, refresh tokens and old events
-- [ ] `deploy/`: compose with caddy + server + postgres + anisette; `.env.example`; backup script
-- [ ] Tests: handlers (table-driven), auth flows (httptest + fake OAuth provider), gateway (WebSocket proxy test)
+- [x] `deploy/`: compose with caddy + server + postgres + anisette; `.env.example`; backup script
+- [x] Tests: handlers (table-driven), auth flows (httptest + fake OAuth provider), gateway (WebSocket proxy test)
 - [x] Resolve **P07** (abuse controls): D24
 
 **Done when:** `docker compose up` on a fresh VPS gives HTTPS, login works with GitHub/Google/email, `curl` with a token reaches anisette through the gateway, and without a token gets 401.
+
+*Checked on a local stack with the real anisette image (gateway with and without a token, backup). Still to check on a real VPS: HTTPS certificate and sign-in with real GitHub/Google/SMTP credentials. Commands: `docs/SELF_HOSTING.md` → Verify your install.*
 
 ## Phase 2: Web dashboard ☐  → `/phase-2`
 - [ ] SvelteKit + adapter-static, embedded into the Go binary (`embed.FS`)

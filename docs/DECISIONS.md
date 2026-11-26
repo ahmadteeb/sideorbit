@@ -31,6 +31,7 @@ Format: **ID · Decision** · *Why* · Alternatives rejected. Add new entries at
 | D25 | **One account per email. A new sign-in method joins it only if it proves control of the mailbox now: a magic link, or Google for gmail.com / the account's Workspace domain. Otherwise sign-in fails with `account_exists`** | "Verified" at GitHub (or Google for a foreign domain) can be years old; a reassigned address must not hand over an account. Only ASCII addresses are accepted, to stop look-alikes | Link on any verified email (account takeover); separate accounts per provider; manual linking UI (later) |
 | D26 | **Magic links open a confirmation page; the button's POST consumes the token** | Mail scanners follow links and would burn a one-time GET. Cross-site POSTs are refused | Consume on GET |
 | D27 | **Account deletion removes all the user's records and leaves an empty user row marked `deleted_at`** | Meets both "delete all data" and "soft-delete users" | Hard delete; keeping the email |
+| D28 | **Anisette provisioning is also capped per IP (10/h) and overall (100/h)** | Per-user quotas reset when an account is deleted and recreated; the shared anisette identity is the asset to protect | Per-user quotas only; blocking re-registration (needs keeping data after deletion) |
 
 ## Pending decisions (to be resolved during the named phase)
 

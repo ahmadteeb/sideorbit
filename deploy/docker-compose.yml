@@ -1,6 +1,13 @@
 # Orbit self-hosted stack. Copy .env.example → .env first. See docs/SELF_HOSTING.md.
 name: orbit
 
+# Container logs are capped so they can't fill the disk or be kept forever.
+x-logging: &logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
+
 services:
   caddy:
     image: caddy:2
@@ -10,18 +17,19 @@ services:
       - "443:443"
       - "443:443/udp"
     environment:
-      ORBIT_DOMAIN: ${ORBIT_DOMAIN}
-      ACME_EMAIL: ${ACME_EMAIL}
+      ORBIT_DOMAIN: ${ORBIT_DOMAIN:?set ORBIT_DOMAIN in .env}
+      ACME_EMAIL: ${ACME_EMAIL:?set ACME_EMAIL in .env}
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
       - caddy_data:/data
       - caddy_config:/config
     depends_on:
       - orbit-server
+    logging: *logging
     networks: [edge]
 
   orbit-server:
-    # Phase 1 builds this from ../server. In releases, use ghcr.io/<owner>/orbit-server:<version>
+    # In releases, use ghcr.io/<owner>/orbit-server:<version> instead of building.
     build:
       context: ..
       dockerfile: server/Dockerfile
@@ -29,15 +37,20 @@ services:
     restart: unless-stopped
     env_file: .env
     environment:
-      DATABASE_URL: postgres://orbit:${POSTGRES_PASSWORD}@postgres:5432/orbit?sslmode=disable
+      # key=value form, so the password needs no URL escaping
+      DATABASE_URL: "host=postgres port=5432 user=orbit dbname=orbit sslmode=disable password='${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}'"
       ANISETTE_UPSTREAM: http://anisette-v3:6969
       HTTP_ADDR: ":8080"
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
     depends_on:
       postgres:
         condition: service_healthy
       anisette-v3:
         condition: service_started
-    networks: [edge, internal]
+    logging: *logging
+    networks: [edge, db, anisette]
 
   postgres:
     image: postgres:16-alpine
@@ -45,23 +58,27 @@ services:
     environment:
       POSTGRES_DB: orbit
       POSTGRES_USER: orbit
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
     volumes:
       - pg_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U orbit -d orbit"]
+      test: ["CMD-SHELL", "pg_isready -U orbit -d orbit -h 127.0.0.1"]
       interval: 5s
       timeout: 3s
       retries: 20
-    networks: [internal]
+    logging: *logging
+    networks: [db]
 
   anisette-v3:
-    # Upstream image, unmodified. INTERNAL ONLY: no published ports; reached via the orbit-server gateway.
-    image: dadoum/anisette-v3-server:latest
+    # Upstream image, unmodified and pinned. INTERNAL ONLY: no published ports;
+    # reached through the orbit-server gateway. It shares a network with nothing else.
+    image: dadoum/anisette-v3-server@sha256:d551c75454bcbee68dc262d4247d5f87fa309dfc8f2125644d333c648596e3c7
     restart: unless-stopped
+    security_opt: ["no-new-privileges:true"]
     volumes:
       - anisette_data:/home/Alcoholic/.config/anisette-v3/lib/
-    networks: [internal]
+    logging: *logging
+    networks: [anisette]
 
 volumes:
   caddy_data:
@@ -71,6 +88,8 @@ volumes:
 
 networks:
   edge:
-  # Not marked `internal: true`, because anisette-v3 needs outbound internet to reach Apple
-  # (library download + provisioning). It's still unreachable from outside because no ports are published.
-  internal:
+  db:
+    internal: true # Postgres has no route to the internet
+  # Not internal: anisette-v3 needs outbound access to reach Apple (library
+  # download and provisioning). It's unreachable from outside: no ports published.
+  anisette:
