@@ -1,0 +1,76 @@
+# Orbit self-hosted stack. Copy .env.example → .env first. See docs/SELF_HOSTING.md.
+name: orbit
+
+services:
+  caddy:
+    image: caddy:2
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    environment:
+      ORBIT_DOMAIN: ${ORBIT_DOMAIN}
+      ACME_EMAIL: ${ACME_EMAIL}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - orbit-server
+    networks: [edge]
+
+  orbit-server:
+    # Phase 1 builds this from ../server. In releases, use ghcr.io/<owner>/orbit-server:<version>
+    build:
+      context: ..
+      dockerfile: server/Dockerfile
+    image: orbit-server:local
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      DATABASE_URL: postgres://orbit:${POSTGRES_PASSWORD}@postgres:5432/orbit?sslmode=disable
+      ANISETTE_UPSTREAM: http://anisette-v3:6969
+      HTTP_ADDR: ":8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      anisette-v3:
+        condition: service_started
+    networks: [edge, internal]
+
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: orbit
+      POSTGRES_USER: orbit
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - pg_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U orbit -d orbit"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    networks: [internal]
+
+  anisette-v3:
+    # Upstream image, unmodified. INTERNAL ONLY: no published ports; reached via the orbit-server gateway.
+    image: dadoum/anisette-v3-server:latest
+    restart: unless-stopped
+    volumes:
+      - anisette_data:/home/Alcoholic/.config/anisette-v3/lib/
+    networks: [internal]
+
+volumes:
+  caddy_data:
+  caddy_config:
+  pg_data:
+  anisette_data:
+
+networks:
+  edge:
+  # Not marked `internal: true`, because anisette-v3 needs outbound internet to reach Apple
+  # (library download + provisioning). It's still unreachable from outside because no ports are published.
+  internal:

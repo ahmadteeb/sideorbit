@@ -1,0 +1,22 @@
+{
+	email {$ACME_EMAIL}
+}
+
+{$ORBIT_DOMAIN} {
+	encode zstd gzip
+
+	# Never expose internal metrics publicly
+	@metrics path /metrics
+	respond @metrics 404
+
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		X-Content-Type-Options "nosniff"
+		Referrer-Policy "strict-origin-when-cross-origin"
+		Permissions-Policy "camera=(), microphone=(), geolocation=()"
+		-Server
+	}
+
+	# API, anisette gateway (incl. WebSocket) and dashboard are all served by orbit-server
+	reverse_proxy orbit-server:8080
+}

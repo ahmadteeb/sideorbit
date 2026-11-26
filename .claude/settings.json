@@ -1,0 +1,13 @@
+{
+  "permissions": {
+    "deny": [
+      "Read(./deploy/.env)",
+      "Read(./**/.env)",
+      "Read(./**/*.p12)",
+      "Read(./**/*.mobiledevicepairing)",
+      "Read(./**/*.pem)",
+      "Bash(git push --force*)",
+      "Bash(git push -f*)"
+    ]
+  }
+}
