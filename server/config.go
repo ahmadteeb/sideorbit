@@ -97,6 +97,8 @@ func loadConfig(getenv func(string) string) (config, error) {
 		HeadersPerMinUser:      count("ANISETTE_HEADERS_PER_MIN_PER_USER", 60),
 		ProvisionPerHourUser:   count("ANISETTE_PROVISION_PER_HOUR_PER_USER", 5),
 		ProvisionPerHourDevice: count("ANISETTE_PROVISION_PER_HOUR_PER_DEVICE", 3),
+		ProvisionPerHourIP:     count("ANISETTE_PROVISION_PER_HOUR_PER_IP", 10),
+		ProvisionPerHourTotal:  count("ANISETTE_PROVISION_PER_HOUR_TOTAL", 100),
 		RequestsPerMinIP:       count("ANISETTE_REQUESTS_PER_MIN_PER_IP", 120),
 		SessionTimeout:         2 * time.Minute,
 	}

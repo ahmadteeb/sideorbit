@@ -31,6 +31,7 @@ const (
 
 // Service serves the inventory and source endpoints.
 type Service struct {
+	pool        *pgxpool.Pool
 	q           *db.Queries
 	log         *slog.Logger
 	requireUser func(http.Handler) http.Handler
@@ -41,7 +42,7 @@ type Service struct {
 // New builds the service. fetch downloads user-supplied URLs, so it must be a
 // safehttp client.
 func New(pool *pgxpool.Pool, log *slog.Logger, requireUser func(http.Handler) http.Handler, fetch *http.Client) *Service {
-	return &Service{q: db.New(pool), log: log, requireUser: requireUser, fetch: fetch,
+	return &Service{pool: pool, q: db.New(pool), log: log, requireUser: requireUser, fetch: fetch,
 		fetches: ratelimit.New(10, time.Minute)}
 }
 
@@ -171,36 +172,58 @@ func (s *Service) addSource(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	_, err = s.q.GetSourceByURL(r.Context(), db.GetSourceByURLParams{UserID: userID, Url: target})
-	status := http.StatusOK // already saved: refresh its name
-	if errors.Is(err, pgx.ErrNoRows) {
-		status = http.StatusCreated
-		var n int64
-		if n, err = s.q.CountSources(r.Context(), userID); err == nil && n >= maxSources {
-			httpx.Error(w, http.StatusForbidden, "source_limit", "This account has reached its source limit.", "Remove a source, then try again.")
-			return
-		}
-	}
-	if err != nil {
-		httpx.Internal(w, r, err)
-		return
-	}
-
 	name, err := s.sourceName(r.Context(), target)
 	if err != nil {
 		// One message for every cause, so the endpoint can't be used to probe
 		// which hosts or ports answer.
-		s.log.Info("source rejected", "user_id", userID, "err", err)
+		// A source URL may carry a secret token in its query: log the host only.
+		var urlErr *url.Error
+		if errors.As(err, &urlErr) {
+			err = urlErr.Err
+		}
+		s.log.Info("source rejected", "user_id", userID, "host", u.Host, "err", err)
 		httpx.Error(w, http.StatusUnprocessableEntity, "invalid_source", "Orbit couldn't read an app source at that address.",
 			"Check that it is a public https link to AltStore source JSON under 2 MB.")
 		return
 	}
-	src, err := s.q.CreateSource(r.Context(), db.CreateSourceParams{ID: uuid.Must(uuid.NewV7()), UserID: userID, Url: target, Name: &name})
+	src, status, err := s.save(r.Context(), userID, target, name)
+	if errors.Is(err, errSourceLimit) {
+		httpx.Error(w, http.StatusForbidden, "source_limit", "This account has reached its source limit.", "Remove a source, then try again.")
+		return
+	}
 	if err != nil {
 		httpx.Internal(w, r, err)
 		return
 	}
 	httpx.JSON(w, status, toSourceView(src))
+}
+
+var errSourceLimit = errors.New("source limit")
+
+// save stores the source with the account locked, so parallel requests can't
+// pass the cap. Saving the same URL again refreshes its name.
+func (s *Service) save(ctx context.Context, userID uuid.UUID, target, name string) (src db.Source, status int, err error) {
+	err = pgx.BeginFunc(ctx, s.pool, func(tx pgx.Tx) error {
+		q := s.q.WithTx(tx)
+		if _, err := q.LockUser(ctx, userID); err != nil {
+			return err
+		}
+		status = http.StatusOK
+		_, err := q.GetSourceByURL(ctx, db.GetSourceByURLParams{UserID: userID, Url: target})
+		if errors.Is(err, pgx.ErrNoRows) {
+			status = http.StatusCreated
+			var n int64
+			if n, err = q.CountSources(ctx, userID); err == nil && n >= maxSources {
+				return errSourceLimit
+			}
+		}
+		if err != nil {
+			return err
+		}
+		src, err = q.CreateSource(ctx, db.CreateSourceParams{ID: uuid.Must(uuid.NewV7()), UserID: userID, Url: target, Name: &name})
+		return err
+	})
+	return src, status, err
 }
 
 func (s *Service) deleteSource(w http.ResponseWriter, r *http.Request) {

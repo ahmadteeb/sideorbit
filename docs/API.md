@@ -90,7 +90,7 @@ Proxies to the internal `anisette-v3:6969`. Requires a bearer token; the WebSock
 - The upstream receives only content and WebSocket headers. A provisioning session is closed after 2 minutes; `get_headers` bodies are at most 64 KB.
 - 502 `anisette_unavailable` if the upstream is down.
 
-Limits (defaults, configurable): 60 requests/min per user across `client_info` and `get_headers`, 5 provisioning sessions/hour per user, 3 per hour per device, 120 requests/min per IP. 429 carries `Retry-After`. Logs contain user ID, device ID, endpoint, status and latency. **Never** request or response bodies.
+Limits (defaults, configurable): 60 requests/min per user across `client_info` and `get_headers`, 5 provisioning sessions/hour per user, 3 per hour per device, 120 requests/min per IP. Provisioning is also capped at 10/hour per IP and 100/hour in total, so that recreating accounts doesn't reset the quota. The per-device limit applies only when `X-Orbit-Device` is sent (a first sign-in may not have a device yet). 429 carries `Retry-After`. Logs contain user ID, device ID, endpoint, status and latency. **Never** request or response bodies.
 
 ## Health
 

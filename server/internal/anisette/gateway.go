@@ -4,12 +4,15 @@
 package anisette
 
 import (
+	"bufio"
 	"context"
 	"errors"
 	"log/slog"
+	"net"
 	"net/http"
 	"net/http/httputil"
 	"net/url"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -29,15 +32,17 @@ const (
 	// Authorization header on a WebSocket.
 	wsTokenPrefix = "orbit.bearer."
 
-	maxBody = 64 << 10
+	maxBody        = 64 << 10
+	requestTimeout = 30 * time.Second // client_info and get_headers
 )
 
 // forwarded lists the only request headers the upstream sees. In particular it
 // never receives the caller's token, cookies or address.
-var forwarded = []string{
-	"Accept", "Content-Type", "Content-Length", "User-Agent",
-	"Connection", "Upgrade", "Sec-Websocket-Key", "Sec-Websocket-Version", "Sec-Websocket-Extensions",
-}
+var (
+	forwarded = []string{"Accept", "Content-Type", "Content-Length", "User-Agent"}
+	// Only the WebSocket route may ask the upstream to switch protocols.
+	forwardedWebSocket = []string{"Connection", "Upgrade", "Sec-Websocket-Key", "Sec-Websocket-Version", "Sec-Websocket-Extensions"}
+)
 
 // Config holds the upstream address and quotas.
 type Config struct {
@@ -45,8 +50,11 @@ type Config struct {
 	HeadersPerMinUser      int
 	ProvisionPerHourUser   int
 	ProvisionPerHourDevice int
-	RequestsPerMinIP       int
-	SessionTimeout         time.Duration // longest provisioning WebSocket
+	// Per address and overall, because a new account has a fresh user quota.
+	ProvisionPerHourIP    int
+	ProvisionPerHourTotal int
+	RequestsPerMinIP      int
+	SessionTimeout        time.Duration // longest provisioning WebSocket
 }
 
 // Authenticator resolves an access token to an account.
@@ -67,13 +75,14 @@ type Gateway struct {
 	log     *slog.Logger
 	proxy   *httputil.ReverseProxy
 
-	ip, headers, provisionUser, provisionDevice *ratelimit.Limiter
+	ip, headers, provisionUser, provisionDevice, provisionIP, provisionTotal *ratelimit.Limiter
 }
 
 // call is what one request's proxying and logging need to share.
 type call struct {
 	path        string
 	subprotocol string
+	websocket   bool
 	status      int
 }
 
@@ -87,6 +96,8 @@ func New(cfg Config, authn Authenticator, devices Devices, log *slog.Logger) *Ga
 		headers:         ratelimit.New(cfg.HeadersPerMinUser, time.Minute),
 		provisionUser:   ratelimit.New(cfg.ProvisionPerHourUser, time.Hour),
 		provisionDevice: ratelimit.New(cfg.ProvisionPerHourDevice, time.Hour),
+		provisionIP:     ratelimit.New(cfg.ProvisionPerHourIP, time.Hour),
+		provisionTotal:  ratelimit.New(cfg.ProvisionPerHourTotal, time.Hour),
 	}
 	g.proxy = &httputil.ReverseProxy{
 		Rewrite: func(pr *httputil.ProxyRequest) {
@@ -98,7 +109,11 @@ func New(cfg Config, authn Authenticator, devices Devices, log *slog.Logger) *Ga
 			pr.Out.URL = &target
 			pr.Out.Host = cfg.Upstream.Host
 			header := http.Header{}
-			for _, name := range forwarded {
+			names := forwarded
+			if c.websocket {
+				names = slices.Concat(forwarded, forwardedWebSocket)
+			}
+			for _, name := range names {
 				if v := pr.Out.Header.Values(name); len(v) > 0 {
 					header[name] = v
 				}
@@ -139,6 +154,26 @@ func (g *Gateway) Routes(r chi.Router) {
 	r.Get("/anisette/v3/provisioning_session", g.handle("v3/provisioning_session", true))
 }
 
+// deadlineWriter bounds the client side of a WebSocket. Cancelling the context
+// closes only the upstream connection, so a client that stayed silent after the
+// upstream hung up would otherwise be held open forever.
+type deadlineWriter struct {
+	http.ResponseWriter
+	deadline time.Time
+}
+
+func (d deadlineWriter) Hijack() (net.Conn, *bufio.ReadWriter, error) {
+	conn, rw, err := http.NewResponseController(d.ResponseWriter).Hijack()
+	if err != nil {
+		return nil, nil, err
+	}
+	if err := conn.SetDeadline(d.deadline); err != nil {
+		_ = conn.Close()
+		return nil, nil, err
+	}
+	return conn, rw, nil
+}
+
 // token returns the bearer token and, for a WebSocket that sent it that way,
 // the subprotocol that carried it. Cookies are not accepted here.
 func token(r *http.Request, websocket bool) (tok, subprotocol string) {
@@ -164,7 +199,7 @@ func (g *Gateway) handle(path string, websocket bool) http.HandlerFunc {
 		start := time.Now()
 		var userID uuid.UUID
 		var deviceID string
-		c := &call{path: path}
+		c := &call{path: path, websocket: websocket}
 		defer func() {
 			// Metadata only (docs/SECURITY.md).
 			g.log.Info("anisette", "user_id", userID, "device_id", deviceID, "endpoint", path,
@@ -225,21 +260,39 @@ func (g *Gateway) handle(path string, websocket bool) http.HandlerFunc {
 				limited("device", time.Hour)
 				return
 			}
+			if !g.provisionIP.Allow(httpx.ClientIP(r)) {
+				limited("ip", time.Hour)
+				return
+			}
+			// Last, so refused callers don't use up everyone's share.
+			if !g.provisionTotal.Allow("") {
+				limited("total", time.Hour)
+				return
+			}
 			if !strings.EqualFold(r.Header.Get("Upgrade"), "websocket") {
 				c.status = http.StatusUpgradeRequired
 				w.Header().Set("Upgrade", "websocket")
 				httpx.Error(w, c.status, "upgrade_required", "This endpoint is a WebSocket.", "")
 				return
 			}
+			if r.ContentLength != 0 {
+				c.status = http.StatusBadRequest
+				httpx.Error(w, c.status, "invalid_request", "A WebSocket request has no body.", "")
+				return
+			}
 			var cancel context.CancelFunc
 			ctx, cancel = context.WithTimeout(ctx, g.cfg.SessionTimeout)
 			defer cancel()
+			w = deadlineWriter{w, time.Now().Add(g.cfg.SessionTimeout)}
 		} else {
 			if !g.headers.Allow(userID.String()) {
 				limited("user", time.Minute)
 				return
 			}
 			r.Body = http.MaxBytesReader(w, r.Body, maxBody)
+			var cancel context.CancelFunc
+			ctx, cancel = context.WithTimeout(ctx, requestTimeout)
+			defer cancel()
 		}
 		g.proxy.ServeHTTP(w, r.WithContext(ctx))
 	}

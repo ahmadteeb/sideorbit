@@ -4,6 +4,7 @@ import (
 	"context"
 	"io"
 	"log/slog"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -71,6 +72,9 @@ func (u *upstream) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 	defer conn.CloseNow()
 	ctx := context.Background()
+	if r.UserAgent() == "hang-up" {
+		return // the upstream closes first
+	}
 	if conn.Write(ctx, websocket.MessageText, []byte(`{"result":"GiveIdentifier"}`)) != nil {
 		return
 	}
@@ -133,6 +137,7 @@ func newEnv(t *testing.T, change func(*Config)) env {
 		t.Fatal(err)
 	}
 	cfg := Config{Upstream: target, HeadersPerMinUser: 60, ProvisionPerHourUser: 5, ProvisionPerHourDevice: 3,
+		ProvisionPerHourIP: 100, ProvisionPerHourTotal: 1000,
 		RequestsPerMinIP: 1000, SessionTimeout: time.Minute}
 	if change != nil {
 		change(&cfg)
@@ -335,6 +340,41 @@ func TestSessionTimeout(t *testing.T) {
 	}
 }
 
+// The upstream hangs up and the client neither reads nor closes.
+func TestSessionEndsWhenClientStaysSilent(t *testing.T) {
+	e := newEnv(t, func(c *Config) { c.SessionTimeout = 300 * time.Millisecond })
+	conn, err := net.Dial("tcp", e.srv.Listener.Addr().String())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer conn.Close()
+	_, err = io.WriteString(conn, "GET /anisette/v3/provisioning_session HTTP/1.1\r\nHost: x\r\n"+
+		"Authorization: Bearer token-a\r\nUser-Agent: hang-up\r\nConnection: Upgrade\r\nUpgrade: websocket\r\n"+
+		"Sec-WebSocket-Version: 13\r\nSec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\n\r\n")
+	if err != nil {
+		t.Fatal(err)
+	}
+	e.logs.waitFor(t, "status=101") // logged only once the handler returns
+}
+
+func TestUpgradeAndBodyRestrictions(t *testing.T) {
+	e := newEnv(t, nil)
+	upgrade := bearer("token-a")
+	upgrade["Connection"], upgrade["Upgrade"] = "Upgrade", "websocket"
+	if res, _ := e.do(t, "GET", "/anisette/v3/client_info", "", upgrade); res.StatusCode != 200 {
+		t.Fatalf("client_info: %d", res.StatusCode)
+	}
+	if got := e.up.headers[0].Get("Upgrade"); got != "" {
+		t.Errorf("a plain route forwarded Upgrade: %q", got)
+	}
+	if res, _ := e.do(t, "GET", "/anisette/v3/provisioning_session", "body", upgrade); res.StatusCode != 400 {
+		t.Errorf("WebSocket request with a body: %d", res.StatusCode)
+	}
+	if len(e.up.paths) != 1 {
+		t.Errorf("upstream saw %v", e.up.paths)
+	}
+}
+
 func TestLimits(t *testing.T) {
 	withDevice := func(token string) map[string]string {
 		h := bearer(token)
@@ -364,6 +404,7 @@ func TestLimits(t *testing.T) {
 		{"headers per user", func(c *Config) { c.HeadersPerMinUser = 2 }, "get_headers", bearer("token-a"), []int{200, 200, 429}},
 		{"provisioning per user", func(c *Config) { c.ProvisionPerHourUser = 2 }, "provisioning_session", bearer("token-a"), []int{426, 426, 429}},
 		{"provisioning per device", func(c *Config) { c.ProvisionPerHourDevice = 1 }, "provisioning_session", withDevice("token-a"), []int{426, 429}},
+		{"provisioning per address", func(c *Config) { c.ProvisionPerHourIP = 1 }, "provisioning_session", bearer("token-a"), []int{426, 429}},
 		{"per address", func(c *Config) { c.RequestsPerMinIP = 2 }, "client_info", nil, []int{401, 401, 429}},
 		{"someone else's device", nil, "get_headers", withDevice("token-b"), []int{403}},
 		{"malformed device", nil, "get_headers", map[string]string{"Authorization": "Bearer token-a", "X-Orbit-Device": "x"}, []int{403}},
@@ -378,6 +419,13 @@ func TestLimits(t *testing.T) {
 			}
 		})
 	}
+	t.Run("overall provisioning cap spans accounts", func(t *testing.T) {
+		e := newEnv(t, func(c *Config) { c.ProvisionPerHourTotal = 1 })
+		a, b := status(t, e, "provisioning_session", bearer("token-a")), status(t, e, "provisioning_session", bearer("token-b"))
+		if a != 426 || b != 429 {
+			t.Errorf("got %d %d", a, b)
+		}
+	})
 	t.Run("one user's limit leaves others alone", func(t *testing.T) {
 		e := newEnv(t, func(c *Config) { c.HeadersPerMinUser = 1 })
 		got := []int{status(t, e, "get_headers", bearer("token-a")), status(t, e, "get_headers", bearer("token-a")), status(t, e, "get_headers", bearer("token-b"))}

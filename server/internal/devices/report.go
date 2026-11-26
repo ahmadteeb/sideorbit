@@ -61,6 +61,7 @@ const (
 
 var (
 	teamIDPattern    = regexp.MustCompile(`^[A-Z0-9]{10}$`)
+	domainPattern    = regexp.MustCompile(`^[A-Za-z0-9-]+(\.[A-Za-z0-9-]+)+$`)
 	bundleIDPattern  = regexp.MustCompile(`^[A-Za-z0-9._-]{1,155}$`)
 	errorCodePattern = regexp.MustCompile(`^[A-Z0-9_]{1,64}$`)
 )
@@ -68,9 +69,10 @@ var (
 // masked requires an Apple ID label with most of the identifier hidden, so an
 // app bug can't send the full address.
 func masked(label string) bool {
-	local, _, _ := strings.Cut(label, "@")
+	local, domain, hasDomain := strings.Cut(label, "@")
 	visible := len(local) - strings.Count(local, "*")
-	return text(label, 64) && strings.Contains(local, "***") && visible <= 4
+	return text(label, 64) && strings.Contains(local, "***") && visible <= 4 &&
+		(!hasDomain || domainPattern.MatchString(domain))
 }
 
 func (b *reportBody) validate(now time.Time) error {
