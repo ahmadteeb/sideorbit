@@ -46,9 +46,9 @@ Each phase is one PR (or a few sub-PRs) with a slash command in `.claude/command
 - [x] Orbit login (`ASWebAuthenticationSession`), Keychain token storage. *Not yet tried on a device*
 - [ ] Apple ID sign-in (anisette via the gateway, 2FA), Keychain storage, certificate management (create/reuse/revoke with a confirmation)
 - [ ] Pairing file import/detect; VPN reachability check; **re-pair flow** (detect invalid → notify → guide)
-- [ ] App sources (AltStore source JSON), app detail, install, refresh, remove; App ID usage tracker (10/week)
-- [ ] Refresh engine: BGAppRefreshTask + App Intent "Refresh Apps"; local notifications (T-48/24/6h + on failure)
-- [ ] Status reporting to the server (`POST /api/devices/:id/report`)
+- [ ] App sources (AltStore source JSON), app detail, install, refresh, remove; App ID usage tracker (10/week). *Done: sources, app detail, add and remove a source. Waiting on P01: install, refresh, remove an app, App ID tracker*
+- [ ] Refresh engine: BGAppRefreshTask + App Intent "Refresh Apps"; local notifications (T-48/24/6h + on failure). *Done: reminders for Orbit's own expiry. The rest needs P01*
+- [ ] Status reporting to the server (`POST /api/devices/:id/report`). *Done: registration and check-in. App inventory and events need P01*
 - [ ] UI per `design-system/orbit/pages/ios.md`; Dynamic Type AX5; VoiceOver labels
 - [x] CI: unsigned `Orbit.ipa` artifact
 
