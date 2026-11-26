@@ -11,10 +11,13 @@ Base URL: `https://<ORBIT_DOMAIN>`. JSON everywhere. Auth uses `Authorization: B
 | POST | `/api/auth/email/start` | `{email, client?, code_challenge?, redirect?}` → 202 whether or not an account exists. 3 per address and 10 per IP per 15 min, 100 per hour in total (429); 503 if mail can't be sent. No captcha (D24) |
 | GET | `/api/auth/email/verify?token=` | A confirmation page. Does not use up the token, so mail scanners can't burn it |
 | POST | `/api/auth/email/verify` | Form field `token`. Single-use, 15 min, same-origin only. Same client handling as the OAuth callback |
+| GET | `/api/auth/methods` | `{github, google, email}`: which sign-in methods are configured. Public |
 | POST | `/api/auth/token` | `{grant_type:"authorization_code", code, code_verifier}` or `{grant_type:"refresh_token", refresh_token}` → `{access_token, expires_in, refresh_token}` |
 | POST | `/api/auth/logout` | `{refresh_token}` (or the web cookie). Revokes the refresh token family; 204 |
 | GET | `/api/me` | Profile, linked identities, limits |
 | POST | `/api/me/delete-intent` | `{confirmation_token, expires_in}` (5 min) |
+| GET | `/api/me/sessions` | `{sessions:[{id, client, created_at, last_used_at, current}]}` |
+| DELETE | `/api/me/sessions/{id}` | Signs that session out (its access token lasts up to 15 min more) |
 | DELETE | `/api/me` | `{confirmation_token}`. Deletes the account and all data (D27) |
 
 ### Sessions
@@ -64,7 +67,9 @@ The server **must reject** any field it doesn't know (`DisallowUnknownFields`) s
 | GET | `/api/events?device_id=&result=&cursor=` | `{events:[…], next_cursor}`, newest first, 50 per page |
 | GET | `/api/sources` | `{sources:[{id,url,name,created_at}]}` |
 | POST | `/api/sources` | `{url}`. Validates by fetching (timeout 5s, max 2 MB, https only, SSRF-safe resolver). 10/min and 50 saved per user |
+| POST | `/api/sources/preview` | `{url}` → `{url, name, app_count, apps}` (first 5 names). Saves nothing; shares the add limit |
 | DELETE | `/api/sources/{id}` | 204 |
+| GET | `/api/events/summary` | `{days:[{date, success, failure}]}`: refreshes per UTC day, last 30 days |
 
 ## Web push
 

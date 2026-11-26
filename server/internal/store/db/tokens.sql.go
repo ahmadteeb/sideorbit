@@ -119,6 +119,17 @@ func (q *Queries) DeleteUserRefreshTokens(ctx context.Context, userID uuid.UUID)
 	return err
 }
 
+const getRefreshTokenFamily = `-- name: GetRefreshTokenFamily :one
+SELECT family_id FROM refresh_tokens WHERE token_hash = $1
+`
+
+func (q *Queries) GetRefreshTokenFamily(ctx context.Context, tokenHash []byte) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, getRefreshTokenFamily, tokenHash)
+	var family_id uuid.UUID
+	err := row.Scan(&family_id)
+	return family_id, err
+}
+
 const getRefreshTokenOwner = `-- name: GetRefreshTokenOwner :one
 SELECT user_id FROM refresh_tokens WHERE token_hash = $1
 `
@@ -128,6 +139,50 @@ func (q *Queries) GetRefreshTokenOwner(ctx context.Context, tokenHash []byte) (u
 	var user_id uuid.UUID
 	err := row.Scan(&user_id)
 	return user_id, err
+}
+
+const listSessions = `-- name: ListSessions :many
+SELECT family_id, client,
+  min(created_at)::timestamptz AS created_at,
+  max(created_at)::timestamptz AS last_used_at
+FROM refresh_tokens
+WHERE user_id = $1
+GROUP BY family_id, client
+HAVING bool_or(used_at IS NULL AND revoked_at IS NULL AND expires_at > now())
+ORDER BY last_used_at DESC, family_id
+`
+
+type ListSessionsRow struct {
+	FamilyID   uuid.UUID
+	Client     string
+	CreatedAt  time.Time
+	LastUsedAt time.Time
+}
+
+// One row per signed-in session that can still be refreshed.
+func (q *Queries) ListSessions(ctx context.Context, userID uuid.UUID) ([]ListSessionsRow, error) {
+	rows, err := q.db.Query(ctx, listSessions, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListSessionsRow
+	for rows.Next() {
+		var i ListSessionsRow
+		if err := rows.Scan(
+			&i.FamilyID,
+			&i.Client,
+			&i.CreatedAt,
+			&i.LastUsedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const lockRefreshToken = `-- name: LockRefreshToken :one
@@ -209,4 +264,21 @@ UPDATE refresh_tokens SET revoked_at = now() WHERE family_id = $1 AND revoked_at
 func (q *Queries) RevokeFamily(ctx context.Context, familyID uuid.UUID) error {
 	_, err := q.db.Exec(ctx, revokeFamily, familyID)
 	return err
+}
+
+const revokeUserFamily = `-- name: RevokeUserFamily :execrows
+UPDATE refresh_tokens SET revoked_at = now() WHERE user_id = $1 AND family_id = $2 AND revoked_at IS NULL
+`
+
+type RevokeUserFamilyParams struct {
+	UserID   uuid.UUID
+	FamilyID uuid.UUID
+}
+
+func (q *Queries) RevokeUserFamily(ctx context.Context, arg RevokeUserFamilyParams) (int64, error) {
+	result, err := q.db.Exec(ctx, revokeUserFamily, arg.UserID, arg.FamilyID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }

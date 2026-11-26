@@ -53,6 +53,7 @@ func (s *Service) Routes(r chi.Router) {
 		r.Get("/api/devices/{id}/apps", s.deviceApps)
 		r.Get("/api/sources", s.listSources)
 		r.Post("/api/sources", s.addSource)
+		r.Post("/api/sources/preview", s.previewSource)
 		r.Delete("/api/sources/{id}", s.deleteSource)
 	})
 }
@@ -114,54 +115,78 @@ func (s *Service) listSources(w http.ResponseWriter, r *http.Request) {
 
 var errNotASource = errors.New("not an AltStore source")
 
-// sourceName downloads an AltStore source and returns its name.
-func (s *Service) sourceName(ctx context.Context, target string) (string, error) {
+// sourceInfo is what a source says about itself.
+type sourceInfo struct {
+	URL      string   `json:"url"`
+	Name     string   `json:"name"`
+	AppCount int      `json:"app_count"`
+	Apps     []string `json:"apps"` // the first few names
+}
+
+// clean makes a third party's text safe to store and show.
+func clean(s string, max int) string {
+	s = strings.ReplaceAll(strings.ToValidUTF8(strings.TrimSpace(s), ""), "\x00", "")
+	if r := []rune(s); len(r) > max {
+		s = string(r[:max])
+	}
+	return s
+}
+
+// fetchSource downloads an AltStore source.
+func (s *Service) fetchSource(ctx context.Context, target string) (sourceInfo, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, target, nil)
 	if err != nil {
-		return "", err
+		return sourceInfo{}, err
 	}
 	req.Header.Set("Accept", "application/json")
 	req.Header.Set("User-Agent", "Orbit")
 	res, err := s.fetch.Do(req)
 	if err != nil {
-		return "", err
+		return sourceInfo{}, err
 	}
 	defer res.Body.Close()
 	if res.StatusCode != http.StatusOK {
-		return "", errNotASource
+		return sourceInfo{}, errNotASource
 	}
 	body, err := io.ReadAll(io.LimitReader(res.Body, maxSourceBytes+1))
 	if err != nil {
-		return "", err
+		return sourceInfo{}, err
 	}
 	var src struct {
 		Name string            `json:"name"`
 		Apps []json.RawMessage `json:"apps"`
 	}
 	if len(body) > maxSourceBytes || json.Unmarshal(body, &src) != nil || src.Apps == nil {
-		return "", errNotASource
+		return sourceInfo{}, errNotASource
 	}
-	name := strings.TrimSpace(src.Name)
-	if name == "" {
-		return "", errNotASource
+	info := sourceInfo{URL: target, Name: clean(src.Name, 200), AppCount: len(src.Apps), Apps: []string{}}
+	if info.Name == "" {
+		return sourceInfo{}, errNotASource
 	}
-	if r := []rune(name); len(r) > 200 {
-		name = string(r[:200])
+	for _, raw := range src.Apps {
+		var app struct {
+			Name string `json:"name"`
+		}
+		if len(info.Apps) < 5 && json.Unmarshal(raw, &app) == nil && clean(app.Name, 100) != "" {
+			info.Apps = append(info.Apps, clean(app.Name, 100))
+		}
 	}
-	return strings.ReplaceAll(strings.ToValidUTF8(name, ""), "\x00", ""), nil
+	return info, nil
 }
 
-func (s *Service) addSource(w http.ResponseWriter, r *http.Request) {
+// read takes {url} from the request and fetches that source, within the user's
+// quota. It writes the error response itself and returns false.
+func (s *Service) read(w http.ResponseWriter, r *http.Request) (sourceInfo, bool) {
 	var req struct {
 		URL string `json:"url"`
 	}
 	if !httpx.Decode(w, r, &req) {
-		return
+		return sourceInfo{}, false
 	}
 	u, err := url.Parse(strings.TrimSpace(req.URL))
 	if err != nil || u.Scheme != "https" || u.Host == "" || u.User != nil || len(req.URL) > 2048 {
 		httpx.Error(w, http.StatusBadRequest, "invalid_url", "A source must be an https URL.", "Check the address.")
-		return
+		return sourceInfo{}, false
 	}
 	u.Fragment = ""
 	target, userID := u.String(), auth.UserID(r.Context())
@@ -169,10 +194,10 @@ func (s *Service) addSource(w http.ResponseWriter, r *http.Request) {
 		s.log.Warn("rate limit hit", "endpoint", "sources", "user_id", userID)
 		w.Header().Set("Retry-After", "60")
 		httpx.Error(w, http.StatusTooManyRequests, "rate_limited", "Too many sources added at once.", "Wait a minute.")
-		return
+		return sourceInfo{}, false
 	}
 
-	name, err := s.sourceName(r.Context(), target)
+	info, err := s.fetchSource(r.Context(), target)
 	if err != nil {
 		// One message for every cause, so the endpoint can't be used to probe
 		// which hosts or ports answer.
@@ -184,9 +209,23 @@ func (s *Service) addSource(w http.ResponseWriter, r *http.Request) {
 		s.log.Info("source rejected", "user_id", userID, "host", u.Host, "err", err)
 		httpx.Error(w, http.StatusUnprocessableEntity, "invalid_source", "Orbit couldn't read an app source at that address.",
 			"Check that it is a public https link to AltStore source JSON under 2 MB.")
+		return sourceInfo{}, false
+	}
+	return info, true
+}
+
+func (s *Service) previewSource(w http.ResponseWriter, r *http.Request) {
+	if info, ok := s.read(w, r); ok {
+		httpx.JSON(w, http.StatusOK, info)
+	}
+}
+
+func (s *Service) addSource(w http.ResponseWriter, r *http.Request) {
+	info, ok := s.read(w, r)
+	if !ok {
 		return
 	}
-	src, status, err := s.save(r.Context(), userID, target, name)
+	src, status, err := s.save(r.Context(), auth.UserID(r.Context()), info.URL, info.Name)
 	if errors.Is(err, errSourceLimit) {
 		httpx.Error(w, http.StatusForbidden, "source_limit", "This account has reached its source limit.", "Remove a source, then try again.")
 		return

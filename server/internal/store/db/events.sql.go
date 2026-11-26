@@ -116,3 +116,45 @@ func (q *Queries) ListEvents(ctx context.Context, arg ListEventsParams) ([]ListE
 	}
 	return items, nil
 }
+
+const summarizeEvents = `-- name: SummarizeEvents :many
+SELECT to_char(e.occurred_at AT TIME ZONE 'UTC', 'YYYY-MM-DD')::text AS day,
+  count(*) FILTER (WHERE e.result = 'success') AS success,
+  count(*) FILTER (WHERE e.result = 'failure') AS failure
+FROM refresh_events e
+JOIN devices d ON d.id = e.device_id
+WHERE d.user_id = $1 AND e.kind = 'refresh' AND e.occurred_at >= $2::timestamptz
+GROUP BY 1
+ORDER BY 1
+`
+
+type SummarizeEventsParams struct {
+	UserID uuid.UUID
+	Since  time.Time
+}
+
+type SummarizeEventsRow struct {
+	Day     string
+	Success int64
+	Failure int64
+}
+
+func (q *Queries) SummarizeEvents(ctx context.Context, arg SummarizeEventsParams) ([]SummarizeEventsRow, error) {
+	rows, err := q.db.Query(ctx, summarizeEvents, arg.UserID, arg.Since)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []SummarizeEventsRow
+	for rows.Next() {
+		var i SummarizeEventsRow
+		if err := rows.Scan(&i.Day, &i.Success, &i.Failure); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
