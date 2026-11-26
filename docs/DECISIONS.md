@@ -26,6 +26,7 @@ Format: **ID · Decision** · *Why* · Alternatives rejected. Add new entries at
 | D20 | **Design: UI-UX-Pro-Max data → Dark OLED + Swiss minimal, green = fresh, system theme** | Matches "Developer Tool" reasoning; calm status-first UX | — |
 | D21 | **Product name "Orbit" (placeholder), bundle prefix `dev.orbitstore`** | Easy to rename (see README "Renaming") | — |
 | D22 | **iOS minimum: 16.0** (iOS 17 APIs behind `#available`) | Developer Mode exists from 16. Covers most devices that LocalDevVPN supports | 15 |
+| D23 | **`main` requires a pull request and all CI checks, with 0 required approvals** (raise to 1 when a second maintainer joins) | One maintainer, and GitHub doesn't allow approving your own PR | 1 required review with an admin bypass |
 
 ## Pending decisions (to be resolved during the named phase)
 
