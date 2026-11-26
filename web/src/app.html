@@ -3,9 +3,18 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="color-scheme" content="light dark" />
+    <meta name="theme-color" content="#F8FAFC" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#0B1120" media="(prefers-color-scheme: dark)" />
+    <meta name="apple-mobile-web-app-title" content="Orbit" />
+    <link rel="manifest" href="%sveltekit.assets%/manifest.webmanifest" />
+    <link rel="icon" href="%sveltekit.assets%/icons/icon.svg" type="image/svg+xml" />
+    <link rel="apple-touch-icon" href="%sveltekit.assets%/icons/apple-touch-icon.png" />
+    <!-- Applies a saved theme before first paint. -->
+    <script src="%sveltekit.assets%/theme.js"></script>
     %sveltekit.head%
   </head>
   <body>
-    <div style="display: contents">%sveltekit.body%</div>
+    <div class="app-root">%sveltekit.body%</div>
   </body>
 </html>

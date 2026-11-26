@@ -1,0 +1,194 @@
+/* Base styles built only from tokens.css (design-system/orbit/MASTER.md). */
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+body {
+  margin: 0;
+  background: var(--color-bg);
+  color: var(--color-text);
+  font-family: var(--font-sans);
+  font-size: 1rem;
+  line-height: 1.5;
+  overflow-wrap: break-word;
+}
+h1,
+h2,
+h3 {
+  font-weight: 600;
+  margin: 0;
+}
+h1 {
+  font-size: 1.375rem;
+  line-height: 1.75rem;
+}
+h2 {
+  font-size: 1.0625rem;
+  line-height: 1.5rem;
+}
+h3 {
+  font-size: 1rem;
+}
+p {
+  margin: 0;
+  max-width: 680px;
+}
+a {
+  color: var(--color-info);
+}
+svg {
+  flex-shrink: 0;
+}
+.stack {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--space-4);
+}
+.sections {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--space-6);
+}
+.row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+}
+.between {
+  justify-content: space-between;
+}
+.card {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  padding: var(--space-4);
+  box-shadow: var(--shadow-card);
+  min-width: 0;
+}
+.list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.list > li {
+  padding-block: var(--space-3);
+  border-top: 1px solid var(--color-border);
+}
+.list > li:first-child {
+  border-top: 0;
+}
+/* A list that is itself a card keeps the card's side padding. */
+.list.card {
+  padding: var(--space-1) var(--space-4);
+}
+.muted {
+  color: var(--color-text-muted);
+}
+.caption {
+  font-size: 0.8125rem;
+  line-height: 1.125rem;
+  font-weight: 500;
+}
+.mono {
+  font-family: var(--font-mono);
+  font-size: 0.875rem;
+  line-height: 1.25rem;
+  overflow-wrap: anywhere;
+}
+.danger-text {
+  color: var(--color-danger);
+}
+/* Keeps its height when empty: clearing an error on blur must not move the
+   button the user is about to press. */
+.field-error {
+  min-height: 1.5rem;
+}
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  min-height: var(--target-min);
+  min-width: var(--target-min);
+  padding: var(--space-2) var(--space-4);
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  color: var(--color-text);
+  font: inherit;
+  font-weight: 600;
+  text-decoration: none;
+  cursor: pointer;
+  transition:
+    opacity var(--motion-instant) ease-out,
+    transform var(--motion-instant) ease-out;
+}
+.btn:active:not(:disabled) {
+  opacity: 0.7;
+  transform: scale(0.97);
+}
+.btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.btn-primary {
+  background: var(--color-primary);
+  border-color: var(--color-primary);
+  color: var(--color-on-primary);
+}
+.btn-danger {
+  border-color: var(--color-danger);
+  color: var(--color-danger);
+}
+@media (prefers-reduced-motion: reduce) {
+  .btn:active:not(:disabled) {
+    transform: none;
+  }
+}
+
+label {
+  display: block;
+  font-weight: 600;
+}
+input[type='email'],
+input[type='url'],
+select {
+  width: 100%;
+  min-height: var(--target-min);
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface-2);
+  color: var(--color-text);
+  font: inherit;
+}
+summary {
+  min-height: var(--target-min);
+  display: flex;
+  align-items: center;
+  cursor: pointer;
+  color: var(--color-info);
+}
+dl {
+  display: grid;
+  grid-template-columns: minmax(7rem, auto) minmax(0, 1fr);
+  gap: var(--space-1) var(--space-3);
+  margin: 0;
+}
+dt {
+  color: var(--color-text-muted);
+}
+dd {
+  margin: 0;
+}
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}

@@ -29,7 +29,7 @@ func TestRouter(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			h := newRouter(slog.New(slog.DiscardHandler), tt.db, tt.anisette)
+			h := newRouter(slog.New(slog.DiscardHandler), tt.db, tt.anisette, nil)
 			rec := httptest.NewRecorder()
 			h.ServeHTTP(rec, httptest.NewRequest(tt.method, tt.path, nil))
 			if rec.Code != tt.wantStatus || rec.Body.String() != tt.wantBody {
@@ -42,7 +42,7 @@ func TestRouter(t *testing.T) {
 func TestReadyzReusesResult(t *testing.T) {
 	calls := 0
 	count := func(context.Context) error { calls++; return nil }
-	h := newRouter(slog.New(slog.DiscardHandler), count, count)
+	h := newRouter(slog.New(slog.DiscardHandler), count, count, nil)
 	for range 20 {
 		h.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest(http.MethodGet, "/readyz", nil))
 	}
@@ -54,7 +54,7 @@ func TestReadyzReusesResult(t *testing.T) {
 func TestRequestLoggerOmitsQueryString(t *testing.T) {
 	var out strings.Builder
 	up := func(context.Context) error { return nil }
-	h := newRouter(slog.New(slog.NewTextHandler(&out, nil)), up, up)
+	h := newRouter(slog.New(slog.NewTextHandler(&out, nil)), up, up, nil)
 	h.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest(http.MethodGet, "/healthz?token=hunter2", nil))
 	if !strings.Contains(out.String(), "route=/healthz") || strings.Contains(out.String(), "hunter2") {
 		t.Errorf("log = %q", out.String())
@@ -87,5 +87,18 @@ func TestAnisetteCheck(t *testing.T) {
 				t.Errorf("err = %v", err)
 			}
 		})
+	}
+}
+
+func TestDashboardNeverAnswersForTheAPI(t *testing.T) {
+	up := func(context.Context) error { return nil }
+	site := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { _, _ = w.Write([]byte("SITE")) })
+	h := newRouter(slog.New(slog.DiscardHandler), up, up, site)
+	for path, wantSite := range map[string]bool{"/": true, "/activity": true, "/api/nope": false, "/anisette/nope": false, "/healthz": false} {
+		rec := httptest.NewRecorder()
+		h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, path, nil))
+		if got := rec.Body.String() == "SITE"; got != wantSite {
+			t.Errorf("%s: served by the dashboard = %v", path, got)
+		}
 	}
 }

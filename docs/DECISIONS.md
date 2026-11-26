@@ -32,6 +32,7 @@ Format: **ID · Decision** · *Why* · Alternatives rejected. Add new entries at
 | D26 | **Magic links open a confirmation page; the button's POST consumes the token** | Mail scanners follow links and would burn a one-time GET. Cross-site POSTs are refused | Consume on GET |
 | D27 | **Account deletion removes all the user's records and leaves an empty user row marked `deleted_at`** | Meets both "delete all data" and "soft-delete users" | Hard delete; keeping the email |
 | D28 | **Anisette provisioning is also capped per IP (10/h) and overall (100/h)** | Per-user quotas reset when an account is deleted and recreated; the shared anisette identity is the asset to protect | Per-user quotas only; blocking re-registration (needs keeping data after deletion) |
+| D29 | **Dashboard sign-in buttons are text-only; the sign-in page uses no GitHub or Google logo** | The official brand assets aren't in the repo and unofficial copies aren't allowed (MASTER §6). Add the official assets before a public launch | Icons from a third-party set |
 
 ## Pending decisions (to be resolved during the named phase)
 
