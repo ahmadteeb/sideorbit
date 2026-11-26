@@ -4,11 +4,11 @@ Each phase is one PR (or a few sub-PRs) with a slash command in `.claude/command
 
 ---
 
-## Phase 0: Foundations ☐  → `/phase-0`
-- [ ] Repo scaffolding per AGENTS.md §2; add the `LICENSE` (AGPL-3.0 full text) and `NOTICE`
-- [ ] `.gitignore`, `.editorconfig`, PR template, CODEOWNERS
-- [ ] Design system in place (`design-system/orbit/*`); copy `OrbitTheme.swift` into the iOS project once it exists
-- [ ] CI skeletons that pass on an empty project: `server.yml`, `web.yml`, `ios.yml` (macos-latest, unsigned build), `desktop.yml` (matrix: macos/windows/ubuntu)
+## Phase 0: Foundations ◐  → `/phase-0`
+- [x] Repo scaffolding per AGENTS.md §2; add the `LICENSE` (AGPL-3.0 full text) and `NOTICE`
+- [x] `.gitignore`, `.editorconfig`, PR template, CODEOWNERS
+- [x] Design system in place (`design-system/orbit/*`); copy `OrbitTheme.swift` into the iOS project once it exists
+- [ ] CI skeletons that pass on an empty project: `server.yml`, `web.yml`, `ios.yml` (macos-latest, unsigned build), `desktop.yml` (matrix: macos/windows/ubuntu). *Written; not yet run on GitHub*
 - [ ] Branch protection on `main`: require CI + 1 review
 
 **Done when:** all 4 workflows are green on `main`.
@@ -29,6 +29,7 @@ Each phase is one PR (or a few sub-PRs) with a slash command in `.claude/command
 ## Phase 2: Web dashboard ☐  → `/phase-2`
 - [ ] SvelteKit + adapter-static, embedded into the Go binary (`embed.FS`)
 - [ ] Pages per `WEB_DASHBOARD.md` + `design-system/orbit/pages/dashboard.md`
+- [ ] Self-host IBM Plex Sans + JetBrains Mono (`font-display: swap`, OFL license file); the Phase 0 skeleton uses the system fallback
 - [ ] PWA manifest, service worker, web push subscribe/unsubscribe/test, iOS "Add to Home Screen" guidance
 - [ ] Playwright: login (mocked), device list, enabling push; axe accessibility check with no serious violations
 - [ ] UX checklist passed; light + dark screenshots at 375 / 768 / 1440

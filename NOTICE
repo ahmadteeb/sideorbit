@@ -1,0 +1,17 @@
+Orbit
+Licensed under the GNU Affero General Public License v3.0 (see LICENSE).
+
+Orbit builds on the work of these projects. Each keeps its own copyright and
+license. See docs/LICENSING.md for how Orbit uses them.
+
+- SideStore (AGPL-3.0)
+  https://github.com/SideStore/SideStore
+- iloader by nab138 (MIT)
+  https://github.com/nab138/iloader
+- anisette-v3-server by Dadoum (no license file found; Orbit runs the
+  unmodified upstream Docker image and includes none of its code)
+  https://github.com/Dadoum/anisette-v3-server
+- LiveContainer (license to be verified before integration)
+  https://github.com/LiveContainer/LiveContainer
+- UI-UX-Pro-Max skill (MIT): Orbit's design decisions are derived from its data
+  https://github.com/nextlevelbuilder/ui-ux-pro-max-skill
