@@ -70,10 +70,14 @@ The server **must reject** any field it doesn't know (`DisallowUnknownFields`) s
 
 | Method | Path | Notes |
 |---|---|---|
-| GET | `/api/push/vapid-public-key` | |
-| POST | `/api/push/subscriptions` | Browser `PushSubscription` JSON |
+| GET | `/api/push/vapid-public-key` | `{public_key}`. The push routes exist only when VAPID keys are configured |
+| POST | `/api/push/subscriptions` | Browser `PushSubscription` JSON → `{id}`. Same endpoint → same id. At most 10 per account |
 | DELETE | `/api/push/subscriptions/{id}` | |
-| POST | `/api/push/test` | Sends a test notification to the caller's subscriptions |
+| POST | `/api/push/test` | `{sent, failed}`; 409 with no subscriptions; 5/min |
+
+Notification payload: `{title, body, url}` (`url` is a dashboard path).
+
+Alerts (every 15 min): one per device when apps expire within 24 h, another within 6 h, and one when a device with apps hasn't reported for 48 h. A refresh re-arms them. Delivery failures are retried; subscriptions reported gone, or failing 10 times, are removed.
 
 ## Anisette gateway
 

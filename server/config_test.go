@@ -34,6 +34,8 @@ func TestLoadConfig(t *testing.T) {
 		{"bad device cap", map[string]string{"MAX_DEVICES_PER_USER": "0"}, "MAX_DEVICES_PER_USER"},
 		{"half a provider", map[string]string{"GOOGLE_CLIENT_ID": "id"}, "GOOGLE_CLIENT_SECRET"},
 		{"smtp without sender", map[string]string{"SMTP_HOST": "smtp.example.com"}, "SMTP_FROM"},
+		{"half a vapid pair", map[string]string{"VAPID_PUBLIC_KEY": "k"}, "VAPID_PRIVATE_KEY"},
+		{"vapid subject", map[string]string{"VAPID_PUBLIC_KEY": "k", "VAPID_PRIVATE_KEY": "k", "VAPID_SUBJECT": "ops"}, "VAPID_SUBJECT"},
 		{"no sign-in method", map[string]string{"GITHUB_CLIENT_ID": "", "GITHUB_CLIENT_SECRET": ""}, "at least one"},
 	}
 	for _, tt := range tests {

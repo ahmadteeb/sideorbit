@@ -13,6 +13,7 @@ import (
 	"github.com/ahmadteeb/sideorbit/server/internal/anisette"
 	"github.com/ahmadteeb/sideorbit/server/internal/auth"
 	"github.com/ahmadteeb/sideorbit/server/internal/mail"
+	"github.com/ahmadteeb/sideorbit/server/internal/push"
 )
 
 type config struct {
@@ -22,6 +23,8 @@ type config struct {
 	logLevel    slog.Level
 	auth        auth.Config
 	gateway     anisette.Config
+	push        push.Keys // empty when web push is off
+	retention   time.Duration
 }
 
 // loadConfig reads the environment and reports every problem at once.
@@ -122,6 +125,18 @@ func loadConfig(getenv func(string) string) (config, error) {
 		a.Mailer = mail.SMTP{Host: host, Port: cmp.Or(getenv("SMTP_PORT"), "587"),
 			Username: getenv("SMTP_USERNAME"), Password: getenv("SMTP_PASSWORD"), From: from}
 	}
+	cfg.retention = time.Duration(count("EVENT_RETENTION_DAYS", 90)) * 24 * time.Hour
+	public, private, subject := getenv("VAPID_PUBLIC_KEY"), getenv("VAPID_PRIVATE_KEY"), getenv("VAPID_SUBJECT")
+	switch {
+	case public == "" && private == "":
+	case public == "" || private == "":
+		fail("set both VAPID_PUBLIC_KEY and VAPID_PRIVATE_KEY, or neither")
+	case !strings.HasPrefix(subject, "mailto:") && !strings.HasPrefix(subject, "https:"):
+		fail("VAPID_SUBJECT must start with mailto: or https:")
+	default:
+		cfg.push = push.Keys{Public: public, Private: private, Subject: subject}
+	}
+
 	if len(a.Providers) == 0 && a.Mailer == nil {
 		fail("configure at least one sign-in method (GitHub, Google or SMTP)")
 	}
