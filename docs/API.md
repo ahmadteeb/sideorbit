@@ -85,7 +85,12 @@ Proxies to the internal `anisette-v3:6969`. Requires a bearer token; the WebSock
 | POST | `/anisette/v3/get_headers` → `/v3/get_headers` |
 | WS | `/anisette/v3/provisioning_session` → `/v3/provisioning_session` |
 
-Limits (defaults, configurable): 60 `get_headers`/min per user, 5 provisioning sessions/hour per user, 3 per hour per device. Logs contain user ID, device ID, endpoint, status and latency. **Never** request or response bodies.
+- Only a bearer token is accepted (never cookies or query strings). A WebSocket client that offers `orbit.bearer.<token>` gets that subprotocol echoed back.
+- Send `X-Orbit-Device: <device id>` once the device is registered; an unknown or foreign id → 403 `unknown_device`.
+- The upstream receives only content and WebSocket headers. A provisioning session is closed after 2 minutes; `get_headers` bodies are at most 64 KB.
+- 502 `anisette_unavailable` if the upstream is down.
+
+Limits (defaults, configurable): 60 requests/min per user across `client_info` and `get_headers`, 5 provisioning sessions/hour per user, 3 per hour per device, 120 requests/min per IP. 429 carries `Retry-After`. Logs contain user ID, device ID, endpoint, status and latency. **Never** request or response bodies.
 
 ## Health
 

@@ -12,6 +12,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/ahmadteeb/sideorbit/server/internal/anisette"
 	"github.com/ahmadteeb/sideorbit/server/internal/apps"
 	"github.com/ahmadteeb/sideorbit/server/internal/auth"
 	"github.com/ahmadteeb/sideorbit/server/internal/devices"
@@ -45,9 +46,11 @@ func run() error {
 	defer db.Close()
 
 	accounts := auth.New(cfg.auth, db, log)
+	registry := devices.New(db, log, accounts.RequireUser, cfg.auth.MaxDevices)
 	handler := newRouter(log, db.Ping, anisetteCheck(cfg.anisetteURL),
 		accounts,
-		devices.New(db, log, accounts.RequireUser, cfg.auth.MaxDevices),
+		registry,
+		anisette.New(cfg.gateway, accounts, registry, log),
 		apps.New(db, log, accounts.RequireUser, safehttp.New(5*time.Second)),
 		events.New(db, accounts.RequireUser),
 	)
