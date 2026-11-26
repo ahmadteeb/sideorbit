@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"io"
 	"log/slog"
@@ -12,14 +11,28 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
+
+	"github.com/ahmadteeb/sideorbit/server/internal/httpx"
 )
 
 // check reports whether a dependency is reachable.
 type check func(context.Context) error
 
-func newRouter(log *slog.Logger, db, anisette check) http.Handler {
+// module is a group of endpoints.
+type module interface{ Routes(chi.Router) }
+
+func newRouter(log *slog.Logger, db, anisette check, modules ...module) http.Handler {
 	r := chi.NewRouter()
 	r.Use(requestLogger(log), middleware.Recoverer)
+	r.NotFound(func(w http.ResponseWriter, _ *http.Request) {
+		httpx.Error(w, http.StatusNotFound, "not_found", "There's nothing at this address.", "")
+	})
+	r.MethodNotAllowed(func(w http.ResponseWriter, _ *http.Request) {
+		httpx.Error(w, http.StatusMethodNotAllowed, "method_not_allowed", "That method isn't supported here.", "")
+	})
+	for _, m := range modules {
+		m.Routes(r)
+	}
 	r.Get("/healthz", func(w http.ResponseWriter, _ *http.Request) {
 		_, _ = io.WriteString(w, "ok\n")
 	})
@@ -60,9 +73,7 @@ func readyz(log *slog.Logger, db, anisette check) http.HandlerFunc {
 			return "ok"
 		}
 		body := map[string]string{"db": run("db", db), "anisette": run("anisette", anisette)}
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(status)
-		_ = json.NewEncoder(w).Encode(body)
+		httpx.JSON(w, status, body)
 	}
 }
 

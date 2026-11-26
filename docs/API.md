@@ -7,13 +7,21 @@ Base URL: `https://<ORBIT_DOMAIN>`. JSON everywhere. Auth uses `Authorization: B
 | Method | Path | Notes |
 |---|---|---|
 | GET | `/api/auth/{github\|google}/start?client=web\|ios\|desktop&code_challenge=&redirect=` | Sets the `state` cookie and redirects to the provider |
-| GET | `/api/auth/{provider}/callback` | Web: sets the session and redirects to `/`. ios/desktop: redirects to `orbit://auth/callback?code=` / `http://127.0.0.1:<port>/callback?code=` |
-| POST | `/api/auth/email/start` | `{email}` → always 202 (no account enumeration). Rate-limited; no captcha (D24) |
-| GET | `/api/auth/email/verify?token=` | Single-use, 15 min. Same client handling as the OAuth callback |
+| GET | `/api/auth/{provider}/callback` | Web: sets the session and redirects to `/`. ios/desktop: redirects to `orbit://auth/callback?code=` / `http://127.0.0.1:<port>/callback?code=`. Failures redirect with `?error=access_denied\|email_unverified\|provider_error` (web: to `/login`) |
+| POST | `/api/auth/email/start` | `{email, client?, code_challenge?, redirect?}` → 202 whether or not an account exists. 3 per address and 10 per IP per 15 min (429); 503 if mail can't be sent. No captcha (D24) |
+| GET | `/api/auth/email/verify?token=` | A confirmation page. Does not use up the token, so mail scanners can't burn it |
+| POST | `/api/auth/email/verify` | Form field `token`. Single-use, 15 min, same-origin only. Same client handling as the OAuth callback |
 | POST | `/api/auth/token` | `{grant_type:"authorization_code", code, code_verifier}` or `{grant_type:"refresh_token", refresh_token}` → `{access_token, expires_in, refresh_token}` |
-| POST | `/api/auth/logout` | Revokes the refresh token family |
+| POST | `/api/auth/logout` | `{refresh_token}` (or the web cookie). Revokes the refresh token family; 204 |
 | GET | `/api/me` | Profile, linked identities, limits |
-| DELETE | `/api/me` | Deletes the account and all data (needs a confirmation token from `/api/me/delete-intent`) |
+| POST | `/api/me/delete-intent` | `{confirmation_token, expires_in}` (5 min) |
+| DELETE | `/api/me` | `{confirmation_token}`. Deletes the account and all data (D27) |
+
+### Sessions
+
+- `client` defaults to `web`. `ios` and `desktop` need a PKCE S256 `code_challenge`. `ios` defaults to `orbit://auth/callback`; `desktop` must send its loopback `redirect` (any port).
+- Access tokens last 15 minutes. Refresh tokens rotate on every use and expire 30 days after sign-in. **Using an old one revokes the whole session**, so a client must never refresh twice in parallel.
+- **Web** keeps both tokens in HttpOnly cookies (`orbit_access`, `orbit_refresh`). Every cookie-authenticated mutation, including refresh and logout, must send an `X-Orbit-CSRF` header (any value). Refresh with `{"grant_type":"refresh_token"}`; the response carries only `expires_in`.
 
 ## Devices
 
