@@ -8,7 +8,7 @@ Each phase is one PR (or a few sub-PRs) with a slash command in `.claude/command
 - [x] Repo scaffolding per AGENTS.md §2; add the `LICENSE` (AGPL-3.0 full text) and `NOTICE`
 - [x] `.gitignore`, `.editorconfig`, PR template, CODEOWNERS
 - [x] Design system in place (`design-system/orbit/*`); copy `OrbitTheme.swift` into the iOS project once it exists
-- [ ] CI skeletons that pass on an empty project: `server.yml`, `web.yml`, `ios.yml` (macos-latest, unsigned build), `desktop.yml` (matrix: macos/windows/ubuntu). *Written; not yet run on GitHub*
+- [x] CI skeletons that pass on an empty project: `server.yml`, `web.yml`, `ios.yml` (macos-latest, unsigned build), `desktop.yml` (matrix: macos/windows/ubuntu)
 - [ ] Branch protection on `main`: require CI + 1 review
 
 **Done when:** all 4 workflows are green on `main`.
