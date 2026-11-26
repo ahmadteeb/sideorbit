@@ -2,6 +2,10 @@ import AuthenticationServices
 import OrbitKit
 import UIKit
 
+struct SheetFailed: LocalizedError {
+    var errorDescription: String? { "The sign-in page didn't open. Close other pop-ups and try again." }
+}
+
 /// Runs the provider's sign-in page in the system sheet.
 @MainActor
 final class WebAuth: NSObject, WebAuthenticator, ASWebAuthenticationPresentationContextProviding {
@@ -16,13 +20,13 @@ final class WebAuth: NSObject, WebAuthenticator, ASWebAuthenticationPresentation
                 } else if (error as? ASWebAuthenticationSessionError)?.code == .canceledLogin {
                     continuation.resume(throwing: SignInCancelled())
                 } else {
-                    continuation.resume(throwing: error ?? APIError.unreachable)
+                    continuation.resume(throwing: SheetFailed())
                 }
             }
             session.presentationContextProvider = self
             self.session = session
             if !session.start() {
-                continuation.resume(throwing: APIError.unreachable)
+                continuation.resume(throwing: SheetFailed())
             }
         }
     }

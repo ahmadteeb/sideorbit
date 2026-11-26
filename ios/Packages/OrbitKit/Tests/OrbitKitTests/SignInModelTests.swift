@@ -45,12 +45,48 @@ final class SignInModelTests: XCTestCase {
         model.serverText = "nonsense"
         await model.connect()
         XCTAssertNil(model.methods)
-        XCTAssertEqual(model.errorMessage, "Enter your server's address, like orbit.example.com.")
+        XCTAssertEqual(model.errorMessage, "Use an HTTPS address with nothing after the host, like orbit.example.com.")
+        XCTAssertEqual(model.errorArea, .server)
         XCTAssertTrue(transport.requests.isEmpty)
+    }
+
+    func testChangingTheServerDropsItsOptions() async {
+        let model = await connected()
+        model.email = "a@example.com"
+        await model.sendEmailLink()
+        model.serverText = "https://orbit.example.com" // the same server, written differently
+        XCTAssertNotNil(model.methods)
+        model.serverText = "other.example.com"
+        XCTAssertNil(model.methods)
+        XCTAssertFalse(model.emailSent)
+        let before = transport.requests.count
+        await model.sendEmailLink()
+        XCTAssertEqual(transport.requests.count, before)
+    }
+
+    func testStoredTokensWithoutAServerAreNoSession() async {
+        let orphaned = SignInModel(defaults: defaults, signedIn: true) { [store, transport] in
+            APIClient(server: $0, store: store, transport: transport)
+        }
+        XCTAssertFalse(orphaned.signedIn)
+        _ = await connected()
+        let restored = SignInModel(defaults: defaults, signedIn: true) { [store, transport] in
+            APIClient(server: $0, store: store, transport: transport)
+        }
+        XCTAssertTrue(restored.signedIn)
+    }
+
+    func testAnEndedSessionSaysWhy() async {
+        let model = await connected()
+        await model.sessionEnded()
+        XCTAssertEqual(model.notice, "Your session ended. Sign in again.")
+        await model.connect()
+        XCTAssertNil(model.notice)
     }
 
     func testConnectLoadsMethodsAndRemembersTheServer() async {
         let model = await connected()
+        XCTAssertEqual(model.serverText, "https://orbit.example.com")
         XCTAssertEqual(model.methods, SignInMethods(github: true, google: false, email: true))
         XCTAssertEqual(self.model().serverText, "https://orbit.example.com")
     }

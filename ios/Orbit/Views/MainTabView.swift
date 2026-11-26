@@ -11,31 +11,31 @@ struct MainTabView: View {
                 placeholder("house", "No apps yet", "Installing and refreshing apps isn't built yet.")
                     .navigationTitle("Home")
             }
-            .tabItem { Label("Home", systemImage: "house") }
+            .tabItem { Label("Home", systemImage: "house").environment(\.symbolVariants, .none) }
 
             NavigationStack {
                 placeholder("square.grid.2x2", "No sources yet", "Browsing app sources isn't built yet.")
                     .navigationTitle("Browse")
             }
-            .tabItem { Label("Browse", systemImage: "square.grid.2x2") }
+            .tabItem { Label("Browse", systemImage: "square.grid.2x2").environment(\.symbolVariants, .none) }
 
             NavigationStack {
                 placeholder("clock.arrow.circlepath", "Nothing yet", "Refresh history will appear here.")
                     .navigationTitle("Activity")
             }
-            .tabItem { Label("Activity", systemImage: "clock.arrow.circlepath") }
+            .tabItem { Label("Activity", systemImage: "clock.arrow.circlepath").environment(\.symbolVariants, .none) }
 
             NavigationStack {
                 SettingsView(model: model)
             }
-            .tabItem { Label("Settings", systemImage: "gearshape") }
+            .tabItem { Label("Settings", systemImage: "gearshape").environment(\.symbolVariants, .none) }
         }
         .tint(OrbitColor.primary)
     }
 
     private func placeholder(_ symbol: String, _ title: String, _ message: String) -> some View {
         EmptyStateView(symbol: symbol, title: title, message: message) {
-            if let url = URL(string: model.serverText) {
+            if let url = ServerAddress.parse(model.serverText) {
                 Link("Open the web dashboard", destination: url)
                     .buttonStyle(OrbitSecondaryStyle())
             }
