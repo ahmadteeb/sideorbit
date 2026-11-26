@@ -36,6 +36,11 @@ final class BasicsTests: XCTestCase {
         }
     }
 
+    func testSourceAddressLosesItsSecrets() {
+        let app = DeviceReport.App(bundleID: "a.b", name: "A", sourceURL: URL(string: "https://user:pw@example.com/s.json?token=x#f"))
+        XCTAssertEqual(app.sourceURL?.absoluteString, "https://example.com/s.json")
+    }
+
     /// The server rejects unknown fields, so these names must match docs/API.md.
     func testReportUsesExactlyTheDocumentedFields() throws {
         let report = DeviceReport(

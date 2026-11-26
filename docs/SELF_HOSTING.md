@@ -43,7 +43,7 @@ VERIFIER=$(openssl rand -hex 32)
 CHALLENGE=$(printf %s "$VERIFIER" | openssl dgst -sha256 -binary | openssl base64 -A | tr '+/' '-_' | tr -d '=')
 REDIRECT=http://127.0.0.1:8765/callback
 
-# GitHub or Google: open this in a browser (use /google/ for Google).
+# GitHub or Google: open this in a browser (use /google/ for Google), then press "Sign in".
 echo "$D/api/auth/github/start?client=desktop&code_challenge=$CHALLENGE&redirect=$REDIRECT"
 
 # Email: request a link (expect 202), then open it from your inbox and press "Sign in".

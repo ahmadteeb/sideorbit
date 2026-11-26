@@ -35,6 +35,7 @@ Format: **ID · Decision** · *Why* · Alternatives rejected. Add new entries at
 | D29 | **Dashboard sign-in buttons are text-only; the sign-in page uses no GitHub or Google logo** | The official brand assets aren't in the repo and unofficial copies aren't allowed (MASTER §6). Add the official assets before a public launch | Icons from a third-party set |
 | D30 | **A push subscription records the web session that created it and is deleted when that session ends** | A signed-out or revoked browser must not keep receiving an account's device alerts. Stores one more id per subscription | Client-side unsubscribe only (misses remote revocation) |
 | D31 | **P02: LocalDevVPN is driven by `localdevvpn://enable?scheme=orbit` (and `disable`), or its Shortcuts action** (`ControlLocalDevVPNIntent`, runs without opening the app) | Read from its source on 2026-11-27; `scheme` makes it switch back to Orbit. Needs a device check | Asking the user to toggle it by hand |
+| D32 | **iOS and desktop sign-ins end on a "Continue as …" page before any code is issued** | Another app can start its own flow and claim `orbit://`; this makes a silent sign-in impossible. A custom scheme can't be made exclusive, and Associated Domains needs a paid account (hard rule 4), so a user who presses the button for an app they didn't open is still exposed | Redirecting straight away |
 
 ## Pending decisions (to be resolved during the named phase)
 

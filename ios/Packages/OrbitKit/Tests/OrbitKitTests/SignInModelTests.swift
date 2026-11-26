@@ -64,16 +64,27 @@ final class SignInModelTests: XCTestCase {
         XCTAssertEqual(transport.requests.count, before)
     }
 
-    func testStoredTokensWithoutAServerAreNoSession() async {
-        let orphaned = SignInModel(defaults: defaults, signedIn: true) { [store, transport] in
-            APIClient(server: $0, store: store, transport: transport)
-        }
-        XCTAssertFalse(orphaned.signedIn)
-        _ = await connected()
-        let restored = SignInModel(defaults: defaults, signedIn: true) { [store, transport] in
+    func testStoredSessionDecidesTheServer() async {
+        _ = await connected() // remembers orbit.example.com
+        let other = URL(string: "https://home.example.net")!
+        let restored = SignInModel(defaults: defaults, sessionServer: other) { [store, transport] in
             APIClient(server: $0, store: store, transport: transport)
         }
         XCTAssertTrue(restored.signedIn)
+        XCTAssertEqual(restored.serverText, other.absoluteString)
+    }
+
+    func testACodeIsNeverSentToAnotherServer() async {
+        let model = await connected()
+        model.email = "a@example.com"
+        await model.sendEmailLink()
+        model.serverText = "other.example.com"
+        await model.connect()
+        let before = transport.requests.count
+        await model.handle(callback: URL(string: "orbit://auth/callback?code=abc")!)
+        XCTAssertEqual(transport.requests.count, before)
+        XCTAssertFalse(model.signedIn)
+        XCTAssertTrue(model.errorMessage?.contains("different server") == true)
     }
 
     func testAnEndedSessionSaysWhy() async {
@@ -98,7 +109,7 @@ final class SignInModelTests: XCTestCase {
         await model.signIn(with: .github, using: web)
 
         XCTAssertTrue(model.signedIn)
-        XCTAssertEqual(store.load()?.accessToken, "access-1")
+        XCTAssertEqual(store.tokens?.accessToken, "access-1")
         let items = URLComponents(url: try XCTUnwrap(opened), resolvingAgainstBaseURL: false)?.queryItems
         let exchange = jsonBody(try XCTUnwrap(transport.requests.last))
         let verifier = try XCTUnwrap(exchange["code_verifier"] as? String)
@@ -148,7 +159,7 @@ final class SignInModelTests: XCTestCase {
         await model.signIn(with: .github, using: FakeWeb(result: .success(URL(string: "orbit://auth/callback?code=abc")!)) { _ in })
         await model.signOut()
         XCTAssertFalse(model.signedIn)
-        XCTAssertNil(store.load())
+        XCTAssertNil(store.tokens)
         XCTAssertNil(model.methods)
     }
 

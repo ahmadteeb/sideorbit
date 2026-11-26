@@ -18,7 +18,7 @@ struct OrbitApp: App {
     @MainActor
     private static func makeModel() -> SignInModel {
         let store = KeychainTokenStore()
-        return SignInModel(signedIn: store.load() != nil) { url in
+        return SignInModel(sessionServer: store.load()?.server) { url in
             APIClient(server: url, store: store)
         }
     }

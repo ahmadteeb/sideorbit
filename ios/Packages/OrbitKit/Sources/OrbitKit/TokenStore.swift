@@ -1,9 +1,20 @@
 import Foundation
 import Security
 
+/// Tokens and the server that issued them. They must never be sent anywhere else.
+public struct StoredSession: Codable, Equatable, Sendable {
+    public var server: URL
+    public var tokens: Tokens
+
+    public init(server: URL, tokens: Tokens) {
+        self.server = server
+        self.tokens = tokens
+    }
+}
+
 public protocol TokenStore: Sendable {
-    func load() -> Tokens?
-    func save(_ tokens: Tokens) throws
+    func load() -> StoredSession?
+    func save(_ session: StoredSession) throws
     func clear()
 }
 
@@ -22,10 +33,10 @@ public struct KeychainTokenStore: TokenStore {
     }
 
     private var query: [CFString: Any] {
-        [kSecClass: kSecClassGenericPassword, kSecAttrService: service, kSecAttrAccount: "tokens"]
+        [kSecClass: kSecClassGenericPassword, kSecAttrService: service, kSecAttrAccount: "session"]
     }
 
-    public func load() -> Tokens? {
+    public func load() -> StoredSession? {
         var search = query
         search[kSecReturnData] = true
         search[kSecMatchLimit] = kSecMatchLimitOne
@@ -33,11 +44,11 @@ public struct KeychainTokenStore: TokenStore {
         guard SecItemCopyMatching(search as CFDictionary, &item) == errSecSuccess, let data = item as? Data else {
             return nil
         }
-        return try? JSONDecoder().decode(Tokens.self, from: data)
+        return try? JSONDecoder().decode(StoredSession.self, from: data)
     }
 
-    public func save(_ tokens: Tokens) throws {
-        let data = try JSONEncoder().encode(tokens)
+    public func save(_ session: StoredSession) throws {
+        let data = try JSONEncoder().encode(session)
         let values: [CFString: Any] = [
             kSecValueData: data,
             kSecAttrAccessible: kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly,

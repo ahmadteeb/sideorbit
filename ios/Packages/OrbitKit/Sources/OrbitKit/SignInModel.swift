@@ -50,24 +50,27 @@ public final class SignInModel: ObservableObject {
     private let defaults: UserDefaults
     private var client: APIClient?
     private var connecting: Task<Void, Never>?
-    /// Kept until the redirect arrives: only this verifier can use the code.
-    private var pending: PKCE?
+    /// Kept until the redirect arrives: only this verifier can use the code, and
+    /// only the server it was made for may see either.
+    private var pending: (pkce: PKCE, server: URL)?
 
     private static let serverKey = "orbit.server"
     private static let verifierKey = "orbit.pkce"
+    private static let verifierServerKey = "orbit.pkce.server"
 
-    /// `signedIn` is whether session tokens are already stored.
-    public init(defaults: UserDefaults = .standard, signedIn: Bool = false, makeClient: @escaping @MainActor (URL) -> APIClient) {
+    /// `sessionServer` is the server the stored tokens belong to, if any. It wins
+    /// over the last typed address (the Keychain outlives deleting the app).
+    public init(defaults: UserDefaults = .standard, sessionServer: URL? = nil, makeClient: @escaping @MainActor (URL) -> APIClient) {
         self.defaults = defaults
         self.makeClient = makeClient
-        let saved = defaults.string(forKey: Self.serverKey) ?? ""
-        serverText = saved
-        // The Keychain survives deleting the app but the server address doesn't:
-        // tokens without a server are no session.
-        self.signedIn = signedIn && ServerAddress.parse(saved) != nil
+        serverText = sessionServer?.absoluteString ?? defaults.string(forKey: Self.serverKey) ?? ""
+        signedIn = sessionServer != nil
         // An emailed link may relaunch the app, so the verifier must survive.
         // It is useless without the code sent to the user's inbox.
-        pending = defaults.string(forKey: Self.verifierKey).map(PKCE.init(verifier:))
+        if let verifier = defaults.string(forKey: Self.verifierKey),
+           let server = defaults.string(forKey: Self.verifierServerKey).flatMap(URL.init(string:)) {
+            pending = (PKCE(verifier: verifier), server)
+        }
     }
 
     public var busy: Bool { activity != nil }
@@ -136,7 +139,7 @@ public final class SignInModel: ObservableObject {
         activity = "Signing in…"
         defer { activity = nil }
         let pkce = PKCE.random()
-        remember(pkce)
+        remember(pkce, for: client.server)
         var parts = URLComponents(url: client.server.appendingPathComponent("api/auth/\(provider.rawValue)/start"), resolvingAgainstBaseURL: false)
         parts?.queryItems = [
             URLQueryItem(name: "client", value: "ios"),
@@ -160,7 +163,7 @@ public final class SignInModel: ObservableObject {
         activity = "Sending link…"
         defer { activity = nil }
         let pkce = PKCE.random()
-        remember(pkce)
+        remember(pkce, for: client.server)
         do {
             try await client.requestEmailLink(email: email.trimmingCharacters(in: .whitespacesAndNewlines), pkce: pkce)
             emailSent = true
@@ -205,14 +208,18 @@ public final class SignInModel: ObservableObject {
               let items = URLComponents(url: callback, resolvingAgainstBaseURL: false)?.queryItems
         else { return }
         // Ignore a callback nobody here asked for: any app or page can open this URL.
-        guard let pkce = pending else { return }
+        guard let (pkce, server) = pending else { return }
         if let failure = items.first(where: { $0.name == "error" })?.value {
             fail(Self.explain(failure), in: .providers)
             return
         }
         guard let code = items.first(where: { $0.name == "code" })?.value else { return }
-        if client == nil { await connect() }
-        guard let client else { return }
+        // Never hand one server's code and verifier to another.
+        guard ServerAddress.parse(serverText) == server else {
+            fail("That sign-in was started for a different server. Start again.", in: .providers)
+            return
+        }
+        guard let client = currentClient() else { return }
         let before = activity
         activity = "Signing in…"
         defer { activity = before }
@@ -234,14 +241,16 @@ public final class SignInModel: ObservableObject {
 
     private static let badAddress = "Use an HTTPS address with nothing after the host, like orbit.example.com."
 
-    private func remember(_ pkce: PKCE) {
-        pending = pkce
+    private func remember(_ pkce: PKCE, for server: URL) {
+        pending = (pkce, server)
         defaults.set(pkce.verifier, forKey: Self.verifierKey)
+        defaults.set(server.absoluteString, forKey: Self.verifierServerKey)
     }
 
     private func forget() {
         pending = nil
         defaults.removeObject(forKey: Self.verifierKey)
+        defaults.removeObject(forKey: Self.verifierServerKey)
     }
 
     private static func describe(_ error: Error) -> String {

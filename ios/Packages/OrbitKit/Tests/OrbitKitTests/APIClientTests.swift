@@ -21,7 +21,7 @@ final class APIClientTests: XCTestCase {
         let refreshes = transport.requests.filter { $0.url!.path == "/api/auth/token" }
         XCTAssertEqual(refreshes.count, 1)
         XCTAssertEqual(jsonBody(refreshes[0])["refresh_token"] as? String, "refresh-0")
-        XCTAssertEqual(store.load()?.refreshToken, "refresh-1")
+        XCTAssertEqual(store.tokens?.refreshToken, "refresh-1")
     }
 
     func testRefusedRefreshSignsOut() async {
@@ -48,7 +48,7 @@ final class APIClientTests: XCTestCase {
         }
         let client = APIClient(server: serverURL, store: store, transport: transport)
         _ = try? await client.profile()
-        XCTAssertEqual(store.load()?.refreshToken, "r")
+        XCTAssertEqual(store.tokens?.refreshToken, "r")
     }
 
     func testSignOutClearsTokensEvenWhenTheServerFails() async {
@@ -57,5 +57,34 @@ final class APIClientTests: XCTestCase {
         await APIClient(server: serverURL, store: store, transport: transport).signOut()
         XCTAssertNil(store.load())
         XCTAssertEqual(jsonBody(transport.requests[0])["refresh_token"] as? String, "r")
+    }
+
+    func testTokensAreNeverSentToAnotherServer() async {
+        let store = MemoryStore(Tokens(accessToken: "secret-a", refreshToken: "secret-r"))
+        let transport = StubTransport { _ in (401, "{}") }
+        let other = APIClient(server: URL(string: "https://evil.example.net")!, store: store, transport: transport)
+        _ = try? await other.profile()
+        await other.signOut()
+        XCTAssertTrue(transport.requests.isEmpty)
+        XCTAssertEqual(store.tokens?.refreshToken, "secret-r")
+    }
+
+    func testARefreshFinishingAfterSignOutStaysSignedOut() async throws {
+        let store = MemoryStore(Tokens(accessToken: "a", refreshToken: "r"))
+        let transport = StubTransport { request in
+            switch request.url!.path {
+            case "/api/auth/token": return (200, tokensJSON(1))
+            case "/api/auth/logout": return (500, "")
+            default: return (401, "{}")
+            }
+        }
+        let client = APIClient(server: serverURL, store: store, transport: transport)
+        let call = Task { try await client.profile() }
+        while !transport.requests.contains(where: { $0.url!.path == "/api/auth/token" }) {
+            try await Task.sleep(nanoseconds: 1_000_000)
+        }
+        await client.signOut()
+        _ = try? await call.value
+        XCTAssertNil(store.tokens)
     }
 }

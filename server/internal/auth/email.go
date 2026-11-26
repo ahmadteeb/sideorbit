@@ -114,11 +114,11 @@ var page = template.Must(template.New("page").Parse(`<!doctype html>
 {{if .Token}}<h1>Sign in to Orbit</h1>
 <p>Continue as <strong>{{.Email}}</strong> in the <strong>{{.App}}</strong>.</p>
 <p>If that isn't your address, or you didn't just ask for this link there, close this page.</p>
-<form method="post" action="/api/auth/email/verify">
+<form method="post" action="{{.Action}}">
 <input type="hidden" name="token" value="{{.Token}}">
 <button type="submit">Sign in</button>
 </form>{{else}}<h1>This link no longer works</h1>
-<p>Sign-in links work once and expire after 15 minutes. Ask for a new one in Orbit.</p>{{end}}
+<p>This sign-in has expired or was already used. Start again in Orbit.</p>{{end}}
 </main>
 </body>
 </html>
@@ -126,14 +126,14 @@ var page = template.Must(template.New("page").Parse(`<!doctype html>
 
 var appNames = map[string]string{ClientWeb: "web dashboard", ClientIOS: "Orbit iPhone app", ClientDesktop: "Orbit Setup desktop app"}
 
-func writePage(w http.ResponseWriter, status int, token, email, client string) {
+func writePage(w http.ResponseWriter, status int, action, token, email, client string) {
 	h := w.Header()
 	h.Set("Content-Type", "text/html; charset=utf-8")
 	h.Set("Content-Security-Policy", pageCSP)
 	h.Set("Referrer-Policy", "same-origin") // the token is in the URL
 	h.Set("Cache-Control", "no-store")
 	w.WriteHeader(status)
-	_ = page.Execute(w, struct{ Token, Email, App string }{token, email, appNames[client]})
+	_ = page.Execute(w, struct{ Action, Token, Email, App string }{action, token, email, appNames[client]})
 }
 
 // emailConfirm only shows a button. Mail scanners open links, and a GET that
@@ -142,14 +142,14 @@ func (s *Service) emailConfirm(w http.ResponseWriter, r *http.Request) {
 	token := r.URL.Query().Get("token")
 	code, err := s.q.PeekLoginCode(r.Context(), db.PeekLoginCodeParams{CodeHash: hashToken(token), Purpose: purposeMagic})
 	if errors.Is(err, pgx.ErrNoRows) || (err == nil && (code.Email == nil || code.Client == nil)) {
-		writePage(w, http.StatusBadRequest, "", "", "")
+		writePage(w, http.StatusBadRequest, "", "", "", "")
 		return
 	}
 	if err != nil {
 		httpx.Internal(w, r, err)
 		return
 	}
-	writePage(w, http.StatusOK, token, *code.Email, *code.Client)
+	writePage(w, http.StatusOK, "/api/auth/email/verify", token, *code.Email, *code.Client)
 }
 
 func (s *Service) emailVerify(w http.ResponseWriter, r *http.Request) {
@@ -157,7 +157,7 @@ func (s *Service) emailVerify(w http.ResponseWriter, r *http.Request) {
 	code, err := s.q.ConsumeLoginCode(r.Context(), db.ConsumeLoginCodeParams{CodeHash: hashToken(r.PostFormValue("token")), Purpose: purposeMagic})
 	if errors.Is(err, pgx.ErrNoRows) || (err == nil && (code.Email == nil || code.Client == nil)) {
 		s.log.Warn("sign-in refused", "provider", "email", "reason", "link")
-		writePage(w, http.StatusBadRequest, "", "", "")
+		writePage(w, http.StatusBadRequest, "", "", "", "")
 		return
 	}
 	if err != nil {

@@ -37,14 +37,25 @@ public struct DeviceReport: Encodable, Equatable, Sendable {
         public var name: String
         public var version: String?
         public var expiresAt: Date?
-        public var sourceURL: URL?
+        public let sourceURL: URL?
 
         public init(bundleID: String, name: String, version: String? = nil, expiresAt: Date? = nil, sourceURL: URL? = nil) {
             self.bundleID = bundleID
             self.name = name
             self.version = version
             self.expiresAt = expiresAt
-            self.sourceURL = sourceURL
+            self.sourceURL = sourceURL.flatMap(Self.withoutSecrets)
+        }
+
+        /// A source address may embed a login or a private token. Neither may
+        /// leave the phone.
+        static func withoutSecrets(_ url: URL) -> URL? {
+            var parts = URLComponents(url: url, resolvingAgainstBaseURL: false)
+            parts?.user = nil
+            parts?.password = nil
+            parts?.query = nil
+            parts?.fragment = nil
+            return parts?.url
         }
 
         enum CodingKeys: String, CodingKey {

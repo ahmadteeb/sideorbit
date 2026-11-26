@@ -3,12 +3,15 @@ import Foundation
 
 final class MemoryStore: TokenStore, @unchecked Sendable {
     private let lock = NSLock()
-    private var tokens: Tokens?
+    private var session: StoredSession?
 
-    init(_ tokens: Tokens? = nil) { self.tokens = tokens }
-    func load() -> Tokens? { lock.withLock { tokens } }
-    func save(_ tokens: Tokens) throws { lock.withLock { self.tokens = tokens } }
-    func clear() { lock.withLock { tokens = nil } }
+    init(_ tokens: Tokens? = nil) {
+        session = tokens.map { StoredSession(server: serverURL, tokens: $0) }
+    }
+    var tokens: Tokens? { lock.withLock { session?.tokens } }
+    func load() -> StoredSession? { lock.withLock { session } }
+    func save(_ session: StoredSession) throws { lock.withLock { self.session = session } }
+    func clear() { lock.withLock { session = nil } }
 }
 
 /// Answers requests from a closure and records them.

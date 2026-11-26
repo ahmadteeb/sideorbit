@@ -28,11 +28,22 @@ public struct URLSessionTransport: Transport {
 
     public func send(_ request: URLRequest) async throws -> (Data, HTTPURLResponse) {
         // Not URLSession.shared: no cache or cookies for authenticated calls.
-        let session = URLSession(configuration: .ephemeral)
+        let session = URLSession(configuration: .ephemeral, delegate: NoRedirects(), delegateQueue: nil)
         defer { session.finishTasksAndInvalidate() }
         let (data, response) = try await session.data(for: request)
         guard let http = response as? HTTPURLResponse else { throw APIError.unreachable }
         return (data, http)
+    }
+}
+
+/// Orbit's API never redirects these calls. Following one would replay a token
+/// or sign-in code to wherever it points.
+private final class NoRedirects: NSObject, URLSessionTaskDelegate {
+    func urlSession(
+        _ session: URLSession, task: URLSessionTask, willPerformHTTPRedirection response: HTTPURLResponse,
+        newRequest request: URLRequest, completionHandler: @escaping (URLRequest?) -> Void
+    ) {
+        completionHandler(nil)
     }
 }
 
@@ -52,7 +63,17 @@ public actor APIClient {
         self.transport = transport
     }
 
-    public var isSignedIn: Bool { store.load() != nil }
+    public var isSignedIn: Bool { tokens != nil }
+
+    /// This server's tokens only.
+    private var tokens: Tokens? {
+        guard let session = store.load(), session.server == server else { return nil }
+        return session.tokens
+    }
+
+    private func save(_ tokens: Tokens) throws {
+        try store.save(StoredSession(server: server, tokens: tokens))
+    }
 
     public func methods() async throws -> SignInMethods {
         try decode(await perform(request("GET", "api/auth/methods")))
@@ -67,7 +88,7 @@ public actor APIClient {
     public func signIn(code: String, pkce: PKCE) async throws {
         let body = ["grant_type": "authorization_code", "code": code, "code_verifier": pkce.verifier]
         let tokens: Tokens = try decode(await perform(request("POST", "api/auth/token", body: body)))
-        try store.save(tokens)
+        try save(tokens)
     }
 
     public func profile() async throws -> Profile {
@@ -80,14 +101,14 @@ public actor APIClient {
 
     /// Signs out. The local tokens go even if the server can't be reached.
     public func signOut() async {
-        if let tokens = store.load() {
-            _ = try? await perform(request("POST", "api/auth/logout", body: ["refresh_token": tokens.refreshToken]))
-        }
+        guard let old = tokens else { return }
+        // Forget them first, so a refresh finishing meanwhile can't restore them.
         store.clear()
+        _ = try? await perform(request("POST", "api/auth/logout", body: ["refresh_token": old.refreshToken]))
     }
 
     private func authorized(_ method: String, _ path: String, data: Data? = nil) async throws -> Data {
-        guard let tokens = store.load() else { throw APIError.signedOut }
+        guard let tokens else { throw APIError.signedOut }
         var call = request(method, path, data: data)
         call.setValue("Bearer \(tokens.accessToken)", forHTTPHeaderField: "Authorization")
         do {
@@ -102,15 +123,17 @@ public actor APIClient {
     private func renew(after old: Tokens) async throws -> Tokens {
         if let refreshing { return try await refreshing.value }
         // Someone else already renewed while this request was in flight.
-        if let current = store.load(), current != old { return current }
+        if let current = tokens, current != old { return current }
         let task = Task { () throws -> Tokens in
             let body = ["grant_type": "refresh_token", "refresh_token": old.refreshToken]
             do {
-                let tokens: Tokens = try decode(await perform(request("POST", "api/auth/token", body: body)))
-                try store.save(tokens)
-                return tokens
+                let renewed: Tokens = try decode(await perform(request("POST", "api/auth/token", body: body)))
+                // Signed out while this was in flight: don't bring the session back.
+                guard tokens == old else { throw APIError.signedOut }
+                try save(renewed)
+                return renewed
             } catch APIError.server(status: 400, code: "invalid_grant", _, _) {
-                store.clear()
+                if tokens == old { store.clear() }
                 throw APIError.signedOut
             }
         }

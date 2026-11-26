@@ -95,6 +95,7 @@ struct SignInView: View {
                 .textContentType(.URL)
                 .submitLabel(.continue)
                 .onSubmit { connect() }
+                .disabled(model.busy)
             status(.server)
             Button("Continue") { connect() }
                 .buttonStyle(OrbitSecondaryStyle())

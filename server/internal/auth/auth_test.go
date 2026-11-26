@@ -149,8 +149,26 @@ func (e *env) do(in req) *httptest.ResponseRecorder {
 	return rec
 }
 
-// oauth runs start -> provider -> callback and returns the callback response.
+var hiddenToken = regexp.MustCompile(`name="token" value="([^"]+)"`)
+
+func (e *env) confirm(token, site string) *httptest.ResponseRecorder {
+	e.t.Helper()
+	return e.do(req{method: "POST", target: "/api/auth/confirm", body: url.Values{"token": {token}}.Encode(),
+		header: map[string]string{"Content-Type": "application/x-www-form-urlencoded", "Sec-Fetch-Site": site}})
+}
+
+// oauth runs the whole sign-in, pressing "Sign in" when a native client is asked to.
 func (e *env) oauth(provider string, params url.Values) *httptest.ResponseRecorder {
+	e.t.Helper()
+	rec := e.callback(provider, params)
+	if m := hiddenToken.FindStringSubmatch(rec.Body.String()); rec.Code == http.StatusOK && m != nil {
+		return e.confirm(m[1], "same-origin")
+	}
+	return rec
+}
+
+// callback runs start -> provider -> callback and returns the callback response.
+func (e *env) callback(provider string, params url.Values) *httptest.ResponseRecorder {
 	e.t.Helper()
 	start := e.do(req{method: "GET", target: "/api/auth/" + provider + "/start?" + params.Encode()})
 	if start.Code != http.StatusFound {
@@ -332,6 +350,36 @@ func TestCallbackRejects(t *testing.T) {
 			}
 		}
 	})
+}
+
+func TestNativeSignInAsksFirst(t *testing.T) {
+	e := newEnv(t)
+	rec := e.callback("github", nativeParams("ios", ""))
+	body := rec.Body.String()
+	if rec.Code != 200 || rec.Header().Get("Location") != "" || !strings.Contains(body, "ada@example.com") || !strings.Contains(body, "Orbit iPhone app") {
+		t.Fatalf("callback: %d %s", rec.Code, body)
+	}
+	if n := e.count("SELECT count(*) FROM login_codes"); n != 0 {
+		t.Fatalf("%d codes issued before the user agreed", n)
+	}
+	token := hiddenToken.FindStringSubmatch(body)[1]
+	access := e.signIn().AccessToken
+	tests := []struct {
+		name, token, site string
+		want              int
+	}{
+		{"another site presses it", token, "cross-site", 403},
+		{"forged", "nonsense", "same-origin", 400},
+		{"a different kind of token", access, "same-origin", 400},
+		{"the user", token, "same-origin", 303},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if rec := e.confirm(tt.token, tt.site); rec.Code != tt.want {
+				t.Errorf("status = %d, want %d", rec.Code, tt.want)
+			}
+		})
+	}
 }
 
 func TestCodeExchange(t *testing.T) {

@@ -96,6 +96,9 @@ func (s *Service) Routes(r chi.Router) {
 		r.Method(http.MethodPost, "/api/auth/email/verify",
 			http.NewCrossOriginProtection().Handler(http.HandlerFunc(s.emailVerify)))
 	}
+	// Same-origin only, so another site can't press the button for the user.
+	r.Method(http.MethodPost, "/api/auth/confirm",
+		http.NewCrossOriginProtection().Handler(http.HandlerFunc(s.confirm)))
 	r.Post("/api/auth/token", s.token)
 	r.Post("/api/auth/logout", s.logout)
 	r.Group(func(r chi.Router) {

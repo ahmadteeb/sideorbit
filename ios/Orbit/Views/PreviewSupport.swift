@@ -8,7 +8,7 @@ extension SignInModel {
 }
 
 private struct PreviewStore: TokenStore {
-    func load() -> Tokens? { nil }
-    func save(_ tokens: Tokens) throws {}
+    func load() -> StoredSession? { nil }
+    func save(_ session: StoredSession) throws {}
     func clear() {}
 }
