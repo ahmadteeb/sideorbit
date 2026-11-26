@@ -187,3 +187,20 @@ test('every control is at least 44px tall on a phone', async ({ page }) => {
     expect(small, path).toEqual([]);
   }
 });
+
+for (const [label, viewport, zoom] of [
+  ['200% text on a phone', { width: 375, height: 812 }, '200%'],
+  ['a phone in landscape', { width: 812, height: 375 }, '100%']
+] as const) {
+  test(`nothing scrolls sideways with ${label}`, async ({ page }) => {
+    await mockApi(page);
+    await page.setViewportSize(viewport);
+    for (const [name, path, ready] of pages.slice(1)) {
+      await page.goto(path);
+      await ready(page);
+      await page.addStyleTag({ content: `html { font-size: ${zoom}; }` });
+      const overflow = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
+      expect.soft(overflow, name).toBeLessThanOrEqual(0);
+    }
+  });
+}
