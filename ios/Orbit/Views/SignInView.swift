@@ -48,9 +48,9 @@ struct SignInView: View {
             }
         }
         // Validate the field being left.
-        .onChange(of: focus) { [focus] next in
-            if focus == .server && next != .server { model.validateServer() }
-            if focus == .email && next != .email && !model.email.isEmpty { model.validateEmail() }
+        .onChange(of: focus) { [previous = focus] next in
+            if previous == .server && next != .server { model.validateServer() }
+            if previous == .email && next != .email && !model.email.isEmpty { model.validateEmail() }
         }
     }
 
