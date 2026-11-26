@@ -28,6 +28,9 @@ Format: **ID · Decision** · *Why* · Alternatives rejected. Add new entries at
 | D22 | **iOS minimum: 16.0** (iOS 17 APIs behind `#available`) | Developer Mode exists from 16. Covers most devices that LocalDevVPN supports | 15 |
 | D23 | **`main` requires a pull request and all CI checks, with 0 required approvals** (raise to 1 when a second maintainer joins) | One maintainer, and GitHub doesn't allow approving your own PR | 1 required review with an admin bypass |
 | D24 | **P07: abuse controls are a device cap per account (`MAX_DEVICES_PER_USER`, default 5) plus rate limits; no captcha** | No third party in the sign-up path; a captcha can be added if abuse appears | Turnstile on the email link (web widget plus webviews in native apps); email/domain allowlist |
+| D25 | **One account per email. A new sign-in method joins it only if it proves control of the mailbox now: a magic link, or Google for gmail.com / the account's Workspace domain. Otherwise sign-in fails with `account_exists`** | "Verified" at GitHub (or Google for a foreign domain) can be years old; a reassigned address must not hand over an account. Only ASCII addresses are accepted, to stop look-alikes | Link on any verified email (account takeover); separate accounts per provider; manual linking UI (later) |
+| D26 | **Magic links open a confirmation page; the button's POST consumes the token** | Mail scanners follow links and would burn a one-time GET. Cross-site POSTs are refused | Consume on GET |
+| D27 | **Account deletion removes all the user's records and leaves an empty user row marked `deleted_at`** | Meets both "delete all data" and "soft-delete users" | Hard delete; keeping the email |
 
 ## Pending decisions (to be resolved during the named phase)
 

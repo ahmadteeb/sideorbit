@@ -24,8 +24,8 @@ func TestRouter(t *testing.T) {
 		{"ready", http.MethodGet, "/readyz", up, up, http.StatusOK, `{"anisette":"ok","db":"ok"}` + "\n"},
 		{"db down", http.MethodGet, "/readyz", down, up, http.StatusServiceUnavailable, `{"anisette":"ok","db":"error"}` + "\n"},
 		{"anisette down", http.MethodGet, "/readyz", up, down, http.StatusServiceUnavailable, `{"anisette":"error","db":"ok"}` + "\n"},
-		{"wrong method", http.MethodPost, "/healthz", up, up, http.StatusMethodNotAllowed, ""},
-		{"unknown path", http.MethodGet, "/nope", up, up, http.StatusNotFound, "404 page not found\n"},
+		{"wrong method", http.MethodPost, "/healthz", up, up, http.StatusMethodNotAllowed, `{"error":{"code":"method_not_allowed","message":"That method isn't supported here."}}` + "\n"},
+		{"unknown path", http.MethodGet, "/nope", up, up, http.StatusNotFound, `{"error":{"code":"not_found","message":"There's nothing at this address."}}` + "\n"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

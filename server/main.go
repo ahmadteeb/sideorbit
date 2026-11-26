@@ -12,6 +12,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/ahmadteeb/sideorbit/server/internal/auth"
 	"github.com/ahmadteeb/sideorbit/server/internal/store"
 )
 
@@ -41,8 +42,9 @@ func run() error {
 
 	srv := &http.Server{
 		Addr:              cfg.httpAddr,
-		Handler:           newRouter(log, db.Ping, anisetteCheck(cfg.anisetteURL)),
+		Handler:           newRouter(log, db.Ping, anisetteCheck(cfg.anisetteURL), auth.New(cfg.auth, db, log)),
 		ReadHeaderTimeout: 10 * time.Second,
+		ReadTimeout:       30 * time.Second,
 		IdleTimeout:       2 * time.Minute,
 	}
 	failed := make(chan error, 1)
