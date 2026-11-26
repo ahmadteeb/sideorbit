@@ -18,8 +18,11 @@ var allowedEverywhere = regexp.MustCompile(`(?i)pairing_?ok`) // a health flag
 
 var allowedIn = map[string]*regexp.Regexp{
 	// The operator's SMTP password.
-	"config.go":             regexp.MustCompile(`SMTP_PASSWORD|\bPassword:`),
+	"config.go":             regexp.MustCompile(`SMTP_PASSWORD|\bPassword:|VAPID_PRIVATE_KEY`),
 	"internal/mail/mail.go": regexp.MustCompile(`\bPassword\b|s\.Password|smtp\.PlainAuth`),
+	// The server's own VAPID key for web push, nothing to do with Apple.
+	"internal/push/push.go": regexp.MustCompile(`VAPIDPrivateKey`),
+	"main.go":               regexp.MustCompile(`VAPID_PRIVATE_KEY`),
 }
 
 func offending(path, content string) (lines []string) {

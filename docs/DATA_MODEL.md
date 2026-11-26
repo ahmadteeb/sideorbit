@@ -118,4 +118,4 @@ CREATE TABLE alerts_sent (                      -- dedupe for scheduler
 
 Later migrations: `0002` adds `devices.last_report_at timestamptz` (the device's clock at its newest report).
 
-Retention: `refresh_events` older than 90 days is pruned nightly. Used or expired `login_codes` older than 1 day are pruned hourly.
+Retention: `refresh_events` older than 90 days is pruned nightly. `login_codes` and `refresh_tokens` are pruned a day after they expire; `alerts_sent` follows the event retention. Pruning runs with the scheduler, every 15 minutes.

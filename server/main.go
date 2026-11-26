@@ -5,27 +5,50 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"log/slog"
 	"net/http"
 	"os"
 	"os/signal"
+	"sync"
 	"syscall"
 	"time"
+
+	webpush "github.com/SherClockHolmes/webpush-go"
 
 	"github.com/ahmadteeb/sideorbit/server/internal/anisette"
 	"github.com/ahmadteeb/sideorbit/server/internal/apps"
 	"github.com/ahmadteeb/sideorbit/server/internal/auth"
 	"github.com/ahmadteeb/sideorbit/server/internal/devices"
 	"github.com/ahmadteeb/sideorbit/server/internal/events"
+	"github.com/ahmadteeb/sideorbit/server/internal/push"
 	"github.com/ahmadteeb/sideorbit/server/internal/safehttp"
+	"github.com/ahmadteeb/sideorbit/server/internal/scheduler"
 	"github.com/ahmadteeb/sideorbit/server/internal/store"
 )
 
 func main() {
-	if err := run(); err != nil {
+	command := run
+	switch {
+	case len(os.Args) == 2 && os.Args[1] == "vapid-keys":
+		command = func() error { return vapidKeys(os.Stdout) }
+	case len(os.Args) > 1:
+		command = func() error { return errors.New("usage: orbit-server [vapid-keys]") }
+	}
+	if err := command(); err != nil {
 		slog.Error("server stopped", "err", err)
 		os.Exit(1)
 	}
+}
+
+// vapidKeys prints a new web push key pair as .env lines.
+func vapidKeys(w io.Writer) error {
+	private, public, err := webpush.GenerateVAPIDKeys()
+	if err != nil {
+		return fmt.Errorf("generate keys: %w", err)
+	}
+	_, err = fmt.Fprintf(w, "VAPID_PUBLIC_KEY=%s\nVAPID_PRIVATE_KEY=%s\n", public, private)
+	return err
 }
 
 func run() error {
@@ -47,13 +70,27 @@ func run() error {
 
 	accounts := auth.New(cfg.auth, db, log)
 	registry := devices.New(db, log, accounts.RequireUser, cfg.auth.MaxDevices)
-	handler := newRouter(log, db.Ping, anisetteCheck(cfg.anisetteURL),
+	modules := []module{
 		accounts,
 		registry,
 		anisette.New(cfg.gateway, accounts, registry, log),
 		apps.New(db, log, accounts.RequireUser, safehttp.New(5*time.Second)),
 		events.New(db, accounts.RequireUser),
-	)
+	}
+	var sender scheduler.Sender
+	if cfg.push.Public != "" {
+		alerts := push.New(cfg.push, db, log, accounts.RequireUser, safehttp.New(10*time.Second))
+		modules, sender = append(modules, alerts), alerts
+	} else {
+		log.Warn("web push is off: VAPID keys are not set")
+	}
+	var jobs sync.WaitGroup
+	defer jobs.Wait()
+	jobsCtx, stopJobs := context.WithCancel(ctx)
+	defer stopJobs() // runs before Wait
+	jobs.Go(func() { scheduler.New(db, sender, log, cfg.retention).Run(jobsCtx) })
+
+	handler := newRouter(log, db.Ping, anisetteCheck(cfg.anisetteURL), modules...)
 	srv := &http.Server{
 		Addr:              cfg.httpAddr,
 		Handler:           handler,
