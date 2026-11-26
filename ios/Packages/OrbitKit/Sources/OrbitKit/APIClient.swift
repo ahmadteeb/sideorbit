@@ -24,11 +24,21 @@ public protocol Transport: Sendable {
 }
 
 public struct URLSessionTransport: Transport {
-    public init() {}
+    public enum Redirects: Sendable {
+        case refuse
+        /// For public downloads only; never with credentials.
+        case httpsOnly
+    }
+
+    private let redirects: Redirects
+
+    public init(redirects: Redirects = .refuse) {
+        self.redirects = redirects
+    }
 
     public func send(_ request: URLRequest) async throws -> (Data, HTTPURLResponse) {
         // Not URLSession.shared: no cache or cookies for authenticated calls.
-        let session = URLSession(configuration: .ephemeral, delegate: NoRedirects(), delegateQueue: nil)
+        let session = URLSession(configuration: .ephemeral, delegate: RedirectPolicy(redirects), delegateQueue: nil)
         defer { session.finishTasksAndInvalidate() }
         let (data, response) = try await session.data(for: request)
         guard let http = response as? HTTPURLResponse else { throw APIError.unreachable }
@@ -36,14 +46,21 @@ public struct URLSessionTransport: Transport {
     }
 }
 
-/// Orbit's API never redirects these calls. Following one would replay a token
-/// or sign-in code to wherever it points.
-private final class NoRedirects: NSObject, URLSessionTaskDelegate {
+/// Orbit's API never redirects its calls, and following one would replay a token
+/// or sign-in code to wherever it points. Public downloads may follow HTTPS.
+private final class RedirectPolicy: NSObject, URLSessionTaskDelegate {
+    private let allowed: URLSessionTransport.Redirects
+
+    init(_ allowed: URLSessionTransport.Redirects) {
+        self.allowed = allowed
+    }
+
     func urlSession(
         _ session: URLSession, task: URLSessionTask, willPerformHTTPRedirection response: HTTPURLResponse,
         newRequest request: URLRequest, completionHandler: @escaping (URLRequest?) -> Void
     ) {
-        completionHandler(nil)
+        let follow = allowed == .httpsOnly && request.url?.scheme?.lowercased() == "https"
+        completionHandler(follow ? request : nil)
     }
 }
 
@@ -97,6 +114,29 @@ public actor APIClient {
 
     public func report(_ report: DeviceReport, deviceID: String) async throws {
         _ = try await authorized("POST", "api/devices/\(deviceID)/report", data: report.encoded())
+    }
+
+    public func sources() async throws -> [SavedSource] {
+        struct Body: Decodable { let sources: [SavedSource] }
+        let body: Body = try decode(await authorized("GET", "api/sources"))
+        return body.sources
+    }
+
+    public func previewSource(_ address: String) async throws -> SourcePreview {
+        try decode(await authorized("POST", "api/sources/preview", data: JSONEncoder().encode(["url": address])))
+    }
+
+    public func addSource(_ address: String) async throws {
+        _ = try await authorized("POST", "api/sources", data: JSONEncoder().encode(["url": address]))
+    }
+
+    public func deleteSource(id: String) async throws {
+        _ = try await authorized("DELETE", "api/sources/\(id)")
+    }
+
+    /// Registering the same `clientID` again returns the same device.
+    public func registerDevice(_ registration: DeviceRegistration) async throws -> RegisteredDevice {
+        try decode(await authorized("POST", "api/devices", data: JSONEncoder().encode(registration)))
     }
 
     /// Signs out. The local tokens go even if the server can't be reached.

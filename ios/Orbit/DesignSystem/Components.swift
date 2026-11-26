@@ -85,3 +85,30 @@ struct ErrorLabel: View {
             .frame(maxWidth: .infinity, alignment: .leading)
     }
 }
+
+extension View {
+    /// A card on the page background.
+    func orbitCard() -> some View {
+        frame(maxWidth: .infinity, alignment: .leading)
+            .padding(OrbitSpace.l)
+            .background(OrbitColor.surface, in: RoundedRectangle(cornerRadius: OrbitRadius.lg))
+    }
+
+    /// Token colours for a `List` or `Form`.
+    func orbitList() -> some View {
+        scrollContentBackground(.hidden)
+            .background(OrbitColor.bg.ignoresSafeArea())
+    }
+}
+
+/// Status as icon, words and colour together.
+struct StatusLabel: View {
+    let status: FreshnessStatus
+
+    var body: some View {
+        Label(status.label, systemImage: status.symbol)
+            .font(.title2.weight(.semibold))
+            .monospacedDigit()
+            .foregroundStyle(status.color)
+    }
+}
