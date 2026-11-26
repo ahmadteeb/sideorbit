@@ -54,10 +54,6 @@ struct SignInView: View {
         }
     }
 
-    private func announce(_ message: String) {
-        UIAccessibility.post(notification: .announcement, argument: message)
-    }
-
     /// Progress and errors sit with the controls that caused them.
     @ViewBuilder
     private func status(_ area: SignInModel.Area) -> some View {

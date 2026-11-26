@@ -10,7 +10,8 @@ struct OrbitApp: App {
         let model = OrbitApp.makeModel()
         _model = StateObject(wrappedValue: model)
         _device = StateObject(wrappedValue: DeviceModel(
-            client: { model.currentClient() }, registration: ThisDevice.registration))
+            client: { model.currentClient() }, registration: ThisDevice.registration,
+            sessionEnded: { await model.sessionEnded() }))
     }
 
     var body: some Scene {

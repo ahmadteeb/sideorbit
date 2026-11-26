@@ -19,6 +19,9 @@ public final class DeviceModel: ObservableObject {
     private let defaults: UserDefaults
     private let now: () -> Date
     private var running = false
+    private let sessionEnded: @MainActor () async -> Void
+    /// Bumped by `forget`, so a request still in flight can't write back.
+    private var generation = 0
 
     private static let idKey = "orbit.device.id"
     private static let nameKey = "orbit.device.name"
@@ -30,12 +33,14 @@ public final class DeviceModel: ObservableObject {
     public init(
         defaults: UserDefaults = .standard, now: @escaping () -> Date = Date.init,
         client: @escaping @MainActor () -> APIClient?,
-        registration: @escaping @MainActor () throws -> DeviceRegistration
+        registration: @escaping @MainActor () throws -> DeviceRegistration,
+        sessionEnded: @escaping @MainActor () async -> Void = {}
     ) {
         self.defaults = defaults
         self.now = now
         self.client = client
         self.registration = registration
+        self.sessionEnded = sessionEnded
     }
 
     /// Call on launch and when the app returns: registers once, then checks in.
@@ -47,23 +52,31 @@ public final class DeviceModel: ObservableObject {
         }
         running = true
         defer { running = false }
+        // Retry and "Add it again" must show that something is happening.
+        if case .listed = state {} else { state = .unknown }
+        let started = generation
         do {
             guard let id = defaults.string(forKey: Self.idKey) else {
-                try await register(client)
+                try await register(client, started: started)
                 return
             }
             let name = defaults.string(forKey: Self.nameKey) ?? "This iPhone"
             let last = defaults.object(forKey: Self.reportedKey) as? Date
             if last.map({ now().timeIntervalSince($0) >= Self.interval }) ?? true {
                 try await client.report(DeviceReport(reportedAt: now()), deviceID: id)
+                guard started == generation else { return }
                 defaults.set(now(), forKey: Self.reportedKey)
             }
             state = .listed(name: name)
+        } catch APIError.signedOut {
+            await sessionEnded()
         } catch APIError.server(status: 404, _, _, _) {
+            guard started == generation else { return }
             defaults.removeObject(forKey: Self.idKey)
             defaults.set(true, forKey: Self.removedKey)
             state = .removed
         } catch {
+            guard started == generation else { return }
             state = .failed((error as? LocalizedError)?.errorDescription ?? "Couldn't update the dashboard.")
         }
     }
@@ -74,16 +87,19 @@ public final class DeviceModel: ObservableObject {
         await checkIn()
     }
 
-    /// On sign-out: the next account registers afresh.
+    /// On sign-out. The installation identifier stays, so another account can only
+    /// list this iPhone after the old one removes it (the server says so).
     public func forget() {
+        generation += 1
         for key in [Self.idKey, Self.nameKey, Self.removedKey, Self.reportedKey] {
             defaults.removeObject(forKey: key)
         }
         state = .unknown
     }
 
-    private func register(_ client: APIClient) async throws {
+    private func register(_ client: APIClient, started: Int) async throws {
         let device = try await client.registerDevice(registration())
+        guard started == generation else { return }
         defaults.set(device.id, forKey: Self.idKey)
         defaults.set(device.name, forKey: Self.nameKey)
         defaults.set(now(), forKey: Self.reportedKey)

@@ -3,6 +3,11 @@ import Foundation
 /// Downloads a source straight from its host. No Orbit token goes with it.
 public struct SourceFetcher: Sendable {
     public static let maxBytes = 2 << 20
+
+    public struct Unreachable: Error, LocalizedError {
+        public let host: String
+        public var errorDescription: String? { "Couldn't reach \(host). Check your connection, then tap Retry." }
+    }
     private let transport: Transport
 
     public init(transport: Transport = URLSessionTransport(redirects: .httpsOnly)) {
@@ -19,7 +24,7 @@ public struct SourceFetcher: Sendable {
         do {
             (data, response) = try await transport.send(request)
         } catch {
-            throw APIError.unreachable
+            throw Unreachable(host: url.host ?? "the source")
         }
         // shortcut: the size is checked after downloading; stream with a cap if
         // oversized sources turn up.

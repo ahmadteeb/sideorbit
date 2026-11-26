@@ -23,6 +23,12 @@ private final class Server: @unchecked Sendable {
     }
 }
 
+private struct FailingTransport: Transport {
+    func send(_ request: URLRequest) async throws -> (Data, HTTPURLResponse) {
+        throw URLError(.notConnectedToInternet)
+    }
+}
+
 @MainActor
 final class ModelTests: XCTestCase {
     private let server = Server()
@@ -135,6 +141,37 @@ final class ModelTests: XCTestCase {
         let model = device()
         await model.checkIn()
         XCTAssertEqual(model.state, .failed("At the limit. Remove one."))
+    }
+
+    func testAnEndedSessionDuringCheckInSignsOut() async {
+        server.set("POST /api/devices", 401)
+        server.set("POST /api/auth/token", 400, #"{"error":{"code":"invalid_grant","message":"x"}}"#)
+        let client = client
+        var signedOut = 0
+        let model = DeviceModel(
+            defaults: defaults, client: { client },
+            registration: { DeviceRegistration(name: "i", model: "m", iosVersion: "18", clientID: "abc12345") },
+            sessionEnded: { signedOut += 1 })
+        await model.checkIn()
+        XCTAssertEqual(signedOut, 1)
+    }
+
+    func testAFailedRemovalKeepsTheSource() async {
+        server.set("DELETE /api/sources/s1", 500)
+        let model = browse()
+        await model.load()
+        let removed = await model.remove(model.sources![0])
+        XCTAssertFalse(removed)
+        XCTAssertEqual(model.sources?.count, 1)
+        XCTAssertNotNil(model.errorMessage)
+    }
+
+    func testAnUnreachableSourceNamesItsHost() async {
+        let model = SourceModel(
+            source: SavedSource(id: "s", url: "https://apps.example.net/s.json", name: nil),
+            fetcher: SourceFetcher(transport: FailingTransport()))
+        await model.load()
+        XCTAssertEqual(model.errorMessage, "Couldn't reach apps.example.net. Check your connection, then tap Retry.")
     }
 
     func testSigningOutForgetsTheDevice() async {

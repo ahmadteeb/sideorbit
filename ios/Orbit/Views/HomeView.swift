@@ -8,6 +8,7 @@ struct HomeView: View {
     var expiry: Date? = ThisDevice.orbitExpiry()
 
     @Environment(\.openURL) private var openURL
+    @Environment(\.scenePhase) private var scenePhase
     @State private var reminders = Reminders.wanted
     @State private var blocked = false
 
@@ -27,10 +28,33 @@ struct HomeView: View {
         }
         .background(OrbitColor.bg.ignoresSafeArea())
         .navigationTitle("Home")
-        .task {
-            blocked = await Reminders.blocked()
-            if reminders, let expiry { await Reminders.schedule(expiry: expiry) }
+        .task { await refreshReminders() }
+        // Notifications may have been allowed in Settings meanwhile.
+        .onChange(of: scenePhase) { phase in
+            if phase == .active {
+                Task { await refreshReminders() }
+            }
         }
+        .onChange(of: device.state) { state in
+            switch state {
+            case .listed(let name): announce("\(name) is on your dashboard")
+            case .removed: announce("This device was removed on the dashboard")
+            case .failed(let message): announce(message)
+            case .unknown: break
+            }
+        }
+    }
+
+    private func refreshReminders() async {
+        blocked = await Reminders.blocked()
+        if reminders, !blocked, let expiry { await Reminders.schedule(expiry: expiry) }
+    }
+
+    /// Names only the warnings still to come.
+    private func upcoming(_ expiry: Date) -> String {
+        let hours = Expiry.reminders(for: expiry, now: Date()).map { $0.id.replacingOccurrences(of: "orbit-expiry-", with: "") }
+        let list = hours.count > 1 ? hours.dropLast().joined(separator: ", ") + " and " + hours[hours.count - 1] : hours.first ?? ""
+        return "You'll be warned \(list) hours before."
     }
 
     private var orbit: some View {
@@ -42,6 +66,10 @@ struct HomeView: View {
                 }
                 Text("Orbit itself stops opening after \(expiry.formatted(date: .abbreviated, time: .shortened)).")
                     .foregroundStyle(OrbitColor.textMuted)
+                if expiry.timeIntervalSinceNow <= 48 * 3600 {
+                    Text("Install it again from your computer before then.")
+                        .foregroundStyle(OrbitColor.text)
+                }
                 reminderControls(expiry)
             } else {
                 Label("Orbit's expiry isn't known", systemImage: "questionmark.circle")
@@ -67,7 +95,7 @@ struct HomeView: View {
             Text("It's too close to expiry to schedule a reminder. Install Orbit again now.")
                 .foregroundStyle(OrbitColor.text)
         } else if reminders {
-            Label("You'll be warned 48, 24 and 6 hours before.", systemImage: "bell")
+            Label(upcoming(expiry), systemImage: "bell")
                 .foregroundStyle(OrbitColor.text)
             Button("Turn off reminders") {
                 Reminders.disable()
@@ -89,7 +117,7 @@ struct HomeView: View {
         VStack(alignment: .leading, spacing: OrbitSpace.m) {
             switch device.state {
             case .unknown:
-                ProgressView("Adding this iPhone to your dashboard…")
+                ProgressView("Contacting your dashboard…")
             case .listed(let name):
                 Label("\(name) is on your dashboard", systemImage: "checkmark.circle")
                     .foregroundStyle(OrbitColor.text)
@@ -98,7 +126,7 @@ struct HomeView: View {
                         .buttonStyle(OrbitSecondaryStyle())
                 }
             case .removed:
-                Label("This iPhone was removed on the dashboard", systemImage: "minus.circle")
+                Label("This device was removed on the dashboard", systemImage: "minus.circle")
                     .foregroundStyle(OrbitColor.warning)
                 Button("Add it again") { Task { await device.addAgain() } }
                     .buttonStyle(OrbitSecondaryStyle())

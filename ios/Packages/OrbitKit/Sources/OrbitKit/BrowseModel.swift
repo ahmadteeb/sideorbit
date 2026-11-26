@@ -69,14 +69,23 @@ public final class BrowseModel: ObservableObject {
         return saved
     }
 
-    public func remove(_ source: SavedSource) async {
+    @discardableResult
+    public func remove(_ source: SavedSource) async -> Bool {
         errorMessage = nil
         do {
             try await client()?.deleteSource(id: source.id)
             sources?.removeAll { $0.id == source.id }
+            return true
         } catch {
             errorMessage = await explain(error)
+            return false
         }
+    }
+
+    public func resetAdd() {
+        address = ""
+        preview = nil
+        addError = nil
     }
 
     private func work(_ job: @MainActor () async throws -> Void) async {

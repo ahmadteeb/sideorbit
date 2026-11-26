@@ -106,9 +106,32 @@ struct StatusLabel: View {
     let status: FreshnessStatus
 
     var body: some View {
-        Label(status.label, systemImage: status.symbol)
+        Label(text, systemImage: status.symbol)
             .font(.title2.weight(.semibold))
             .monospacedDigit()
             .foregroundStyle(status.color)
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel(spoken)
     }
+
+    private var text: String {
+        if case .expiring(let hours) = status, hours < 1 { return "Expires in under 1h" }
+        return status.label
+    }
+
+    /// VoiceOver reads "5d" letter by letter.
+    private var spoken: String {
+        switch status {
+        case .fresh(let days): "Fresh, \(days) days left"
+        case .expiring(let hours): hours < 1 ? "Expires in under an hour" : "Expires in \(hours) hours"
+        case .expired: "Expired"
+        case .refreshing: "Refreshing"
+        case .needsAction(let what): what
+        }
+    }
+}
+
+/// Tells VoiceOver about a change it wouldn't otherwise notice.
+func announce(_ message: String) {
+    UIAccessibility.post(notification: .announcement, argument: message)
 }

@@ -41,7 +41,9 @@ public struct AltSource: Equatable, Sendable {
     public let apps: [App]
 
     public struct Invalid: Error, LocalizedError {
-        public var errorDescription: String? { "That address doesn't hold an app source Orbit can read." }
+        public var errorDescription: String? {
+            "That address doesn't hold an app source Orbit can read. Check the link with whoever publishes it, or remove the source."
+        }
     }
 
     public static func parse(_ data: Data) throws -> AltSource {

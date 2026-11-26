@@ -6,15 +6,12 @@ struct RootView: View {
     @ObservedObject var device: DeviceModel
 
     var body: some View {
-        Group {
-            if model.signedIn {
-                MainTabView(model: model, device: device)
-            } else {
-                SignInView(model: model)
-            }
-        }
-        .onChange(of: model.signedIn) { signedIn in
-            if !signedIn { device.forget() }
+        if model.signedIn {
+            MainTabView(model: model, device: device)
+        } else {
+            // Also covers a sign-out that happened while the app was closed.
+            SignInView(model: model)
+                .onAppear { device.forget() }
         }
     }
 }
