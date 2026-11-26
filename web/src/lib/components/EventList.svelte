@@ -26,14 +26,17 @@
       </span>
       <div>
         <h3>{eventTitle(event)}</h3>
+        {#if showDevice}<a class="tap" href="/devices/{event.device_id}">{event.device_name}</a>{/if}
         <p class="caption muted">
-          {#if showDevice}<a href="/devices/{event.device_id}">{event.device_name}</a> · {/if}
           {dateTime(event.occurred_at)}
           {#if event.trigger} · {triggers[event.trigger] ?? event.trigger}{/if}
         </p>
         {#if !ok}
           {@const why = failureText(event.error_code)}
           <p>{why.cause} {why.fix}</p>
+          <a class="tap" href="https://github.com/ahmadteeb/sideorbit/blob/main/docs/USER_GUIDE.md#troubleshooting" target="_blank" rel="noopener">
+            More help<span class="sr-only"> with: {why.cause}</span>
+          </a>
         {/if}
       </div>
     </li>

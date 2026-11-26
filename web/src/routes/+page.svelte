@@ -45,7 +45,7 @@
           </a>
         </Notice>
       {:else}
-        {@const state = summary(rows.flatMap((r) => r.apps), rows.map((r) => r.device), clock.now)}
+        {@const state = summary(Object.fromEntries(rows.map((r) => [r.device.id, r.apps])), rows.map((r) => r.device), clock.now)}
         {@const Icon = icons[state.icon]}
         <section class="card hero {state.tone}" aria-live="polite">
           <Icon size={28} strokeWidth={1.75} aria-hidden="true" />
@@ -55,7 +55,7 @@
           </div>
         </section>
 
-        <div class="stack">
+        <div class="sections">
           {#each rows as { device, apps } (device.id)}
             <section class="card stack" aria-labelledby="device-{device.id}">
               <div>

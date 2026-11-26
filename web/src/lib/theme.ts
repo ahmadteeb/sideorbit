@@ -12,6 +12,12 @@ export function savedTheme(): Theme {
 export function applyTheme(theme: Theme) {
   if (theme === 'system') delete document.documentElement.dataset.theme;
   else document.documentElement.dataset.theme = theme;
+  // The browser or installed app's bar follows the choice too.
+  const bg = getComputedStyle(document.documentElement).getPropertyValue('--color-bg').trim();
+  for (const meta of document.querySelectorAll<HTMLMetaElement>('meta[name=theme-color]')) {
+    meta.dataset.system ??= meta.content;
+    meta.content = theme === 'system' ? meta.dataset.system : bg;
+  }
   try {
     if (theme === 'system') localStorage.removeItem('orbit-theme');
     else localStorage.setItem('orbit-theme', theme);

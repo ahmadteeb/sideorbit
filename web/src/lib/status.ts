@@ -40,34 +40,47 @@ export function deviceProblems(device: Device, now: number): Status[] {
 
 /** The one-sentence answer to "will my apps expire?". */
 export function summary(
-  apps: App[],
+  appsByDevice: Record<string, App[]>,
   devices: Device[],
   now: number
 ): Status & { next: string } {
+  const apps = Object.values(appsByDevice).flat();
   const states = apps.map((a) => freshness(a.expires_at, now).icon);
   const expired = states.filter((s) => s === 'expired').length;
   const expiring = states.filter((s) => s === 'expiring').length;
+  const unknown = states.filter((s) => s === 'unknown').length;
   const count = (n: number) => (n === 1 ? '1 app' : `${n} apps`);
+  // Name the devices that hold apps in a state, and say what to do there.
+  const act = (state: StatusIcon) => {
+    const hit = devices.filter((d) => (appsByDevice[d.id] ?? []).some((a) => freshness(a.expires_at, now).icon === state));
+    const names = hit.length === 1 ? hit[0].name : 'those devices';
+    return hit.some((d) => d.vpn_ok === false)
+      ? `Turn on LocalDevVPN on ${names}, then tap Refresh in Orbit.`
+      : `Open Orbit on ${names} and tap Refresh.`;
+  };
   if (expired)
     return {
       tone: 'danger',
       icon: 'expired',
       label: `${count(expired)} expired`,
-      next: 'Open Orbit on that iPhone and tap Refresh.'
+      next: act('expired')
     };
   if (expiring)
     return {
       tone: 'warning',
       icon: 'expiring',
       label: `${count(expiring)} ${expiring === 1 ? 'expires' : 'expire'} soon`,
-      next: 'Open Orbit on that iPhone and tap Refresh.'
+      next: act('expiring')
     };
   if (devices.some((d) => deviceProblems(d, now).length))
     return {
       tone: 'warning',
       icon: 'action',
       label: 'A device needs attention',
-      next: 'Your apps are still fresh. Check the device below.'
+      next:
+        apps.length && !unknown
+          ? 'Your apps are still fresh. Check the device below.'
+          : 'Check the device below.'
     };
   if (!apps.length)
     return {
@@ -75,6 +88,14 @@ export function summary(
       icon: 'unknown',
       label: 'No apps reported yet',
       next: 'Open Orbit on your iPhone so it can report its apps.'
+    };
+  // Never claim "up to date" about an expiry nobody reported.
+  if (unknown)
+    return {
+      tone: 'muted',
+      icon: 'unknown',
+      label: `Expiry not reported for ${count(unknown)}`,
+      next: 'Open Orbit on your iPhone so it can report them.'
     };
   return {
     tone: 'primary',

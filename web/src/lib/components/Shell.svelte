@@ -37,6 +37,10 @@
 </main>
 
 <style>
+  /* Keeps a focused control from scrolling under the tab bar. */
+  :global(html) {
+    scroll-padding-bottom: calc(5.5rem + env(safe-area-inset-bottom));
+  }
   main {
     --gutter: var(--space-4);
     max-width: 60rem;
@@ -62,7 +66,7 @@
   }
   ul {
     display: grid;
-    grid-template-columns: repeat(4, 1fr);
+    grid-template-columns: repeat(4, minmax(0, 1fr));
     gap: var(--space-2);
   }
   nav :global(.list > li) {
@@ -134,6 +138,9 @@
       gap: var(--space-3);
       min-height: var(--target-min);
       padding-inline: var(--space-3);
+    }
+    :global(html) {
+      scroll-padding-bottom: 0;
     }
     main {
       margin-left: max(14rem, calc((100vw - 60rem) / 2));

@@ -792,6 +792,12 @@ func TestSessions(t *testing.T) {
 		}
 		return body.Sessions
 	}
+	// Alerts turned on from a session end with it.
+	subscribe := func(session uuid.UUID) {
+		t.Helper()
+		e.exec("INSERT INTO push_subscriptions (id, user_id, endpoint, p256dh, auth, session_id) SELECT gen_random_uuid(), u.id, '" +
+			uuid.NewString() + "', 'k', 'a', '" + session.String() + "' FROM users u WHERE u.email = 'ada@example.com'")
+	}
 	// Rotation must not create a second session.
 	_, app2 := e.token(refresh(app.RefreshToken))
 	sessions := list()
@@ -820,6 +826,8 @@ func TestSessions(t *testing.T) {
 	if code := revoke(app2.AccessToken, uuid.New()); code != 404 {
 		t.Errorf("unknown session: %d", code)
 	}
+	subscribe(other)
+	subscribe(mine)
 	if code := revoke(app2.AccessToken, other); code != 204 {
 		t.Fatalf("revoke: %d", code)
 	}
@@ -828,5 +836,12 @@ func TestSessions(t *testing.T) {
 	}
 	if got := list(); len(got) != 1 || got[0].ID != mine {
 		t.Errorf("after revoke: %+v", got)
+	}
+	if n := e.count("SELECT count(*) FROM push_subscriptions"); n != 1 {
+		t.Errorf("%d subscriptions after revoking one session", n)
+	}
+	out := e.do(req{method: "POST", target: "/api/auth/logout", cookies: cookies, header: map[string]string{csrfHeader: "1"}})
+	if out.Code != 204 || e.count("SELECT count(*) FROM push_subscriptions") != 0 {
+		t.Errorf("sign-out left alerts on (%d)", out.Code)
 	}
 }

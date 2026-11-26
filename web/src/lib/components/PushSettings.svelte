@@ -1,14 +1,16 @@
 <!-- Web push. Permission is only requested after the user taps "Enable alerts". -->
 <script lang="ts">
+  import { tick } from 'svelte';
   import { ApiError, api, asApiError } from '$lib/api';
   import { disablePush, enablePush, isSubscribed, pushBlocker, type PushBlocker } from '$lib/push';
 
-  let view = $state<'loading' | 'off' | 'on' | 'unconfigured' | NonNullable<PushBlocker>>('loading');
+  let view = $state<'loading' | 'off' | 'on' | 'unconfigured' | 'failed' | NonNullable<PushBlocker>>('loading');
   let busy = $state(false);
   let message = $state('');
   let error = $state('');
 
   async function check() {
+    view = 'loading';
     try {
       await api('GET', '/api/push/vapid-public-key');
     } catch (e) {
@@ -21,7 +23,11 @@
     const blocker = pushBlocker();
     view = blocker ?? ((await isSubscribed()) ? 'on' : 'off');
   }
-  void check().catch(() => (view = 'unsupported'));
+  function start() {
+    void check().catch(() => (view = 'failed'));
+  }
+  start();
+  let heading: HTMLHeadingElement;
 
   async function run(action: () => Promise<string>) {
     busy = true;
@@ -34,6 +40,9 @@
       error = `${failure.message} ${failure.fix}`;
     } finally {
       busy = false;
+      // The button just pressed may be gone; don't drop focus to the page.
+      await tick();
+      if (document.activeElement === document.body) heading.focus();
     }
   }
 
@@ -41,7 +50,7 @@
     run(async () => {
       if (await enablePush()) {
         view = 'on';
-        return 'Alerts are on for this browser.';
+        return '';
       }
       view = pushBlocker() ?? 'off';
       return '';
@@ -50,7 +59,7 @@
     run(async () => {
       await disablePush();
       view = 'off';
-      return 'Alerts are off for this browser.';
+      return '';
     });
   const test = () =>
     run(async () => {
@@ -61,7 +70,7 @@
 </script>
 
 <section class="card stack" aria-labelledby="alerts">
-  <h2 id="alerts">Alerts</h2>
+  <h2 id="alerts" tabindex="-1" bind:this={heading}>Alerts</h2>
   <p class="muted">Orbit warns you before apps expire and when a device stops checking in.</p>
 
   {#if view === 'loading'}
@@ -79,6 +88,9 @@
     <p>This browser can't receive alerts. Try Safari, Chrome, Edge or Firefox.</p>
   {:else if view === 'denied'}
     <p>Notifications are blocked for this site. Allow them in your browser's settings, then reload.</p>
+  {:else if view === 'failed'}
+    <p>Orbit couldn't check alerts for this browser.</p>
+    <div><button class="btn" type="button" onclick={start}>Retry</button></div>
   {:else if view === 'off'}
     <div><button class="btn btn-primary" type="button" onclick={enable} disabled={busy}>{busy ? 'Turning on…' : 'Enable alerts'}</button></div>
   {:else}
@@ -89,7 +101,7 @@
     </div>
   {/if}
 
-  <p role="status">{message}</p>
+  <p role="status" class:sr-only={!message}>{message || (view === 'on' ? 'Alerts are on.' : '')}</p>
   {#if error}<p class="danger-text" role="alert">{error}</p>{/if}
 </section>
 

@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { tick } from 'svelte';
   import { goto } from '$app/navigation';
   import { page } from '$app/state';
   import { api, asApiError } from '$lib/api';
@@ -37,11 +38,16 @@
 
   async function submit(event: SubmitEvent) {
     event.preventDefault();
-    if (!validate()) return;
+    if (!validate()) {
+      document.getElementById('email')?.focus();
+      return;
+    }
     busy = true;
     try {
       await api('POST', '/api/auth/email/start', { email: email.trim() });
       sent = true;
+      await tick();
+      document.getElementById('sent')?.focus();
     } catch (e) {
       const failure = asApiError(e);
       error = `${failure.message} ${failure.fix}`;
@@ -64,6 +70,9 @@
   <Loaded of={methods}>
     {#snippet children(available)}
       <div class="stack">
+        {#if !available.github && !available.google && !available.email}
+          <p class="card">No way to sign in is set up on this server. Whoever runs it needs to add GitHub, Google or email settings.</p>
+        {/if}
         <!-- Full page loads: these leave the app. -->
         {#if available.github}<a class="btn" href="/api/auth/github/start" data-sveltekit-reload>Continue with GitHub</a>{/if}
         {#if available.google}<a class="btn" href="/api/auth/google/start" data-sveltekit-reload>Continue with Google</a>{/if}
@@ -71,7 +80,7 @@
         {#if available.email}
           {#if sent}
             <div class="card stack" role="status">
-              <h2>Check your inbox</h2>
+              <h2 id="sent" tabindex="-1">Check your inbox</h2>
               <p>We sent a sign-in link to {email}. It works once and expires in 15 minutes.</p>
               <div><button class="btn" type="button" onclick={() => (sent = false)}>Use a different address</button></div>
             </div>

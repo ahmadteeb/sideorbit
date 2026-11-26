@@ -48,8 +48,17 @@ func (q *Queries) DeletePushSubscriptionByID(ctx context.Context, id uuid.UUID) 
 	return err
 }
 
+const deleteSessionPushSubscriptions = `-- name: DeleteSessionPushSubscriptions :exec
+DELETE FROM push_subscriptions WHERE session_id = $1::uuid
+`
+
+func (q *Queries) DeleteSessionPushSubscriptions(ctx context.Context, sessionID uuid.UUID) error {
+	_, err := q.db.Exec(ctx, deleteSessionPushSubscriptions, sessionID)
+	return err
+}
+
 const listPushSubscriptions = `-- name: ListPushSubscriptions :many
-SELECT id, user_id, endpoint, p256dh, auth, user_agent, failures, created_at FROM push_subscriptions WHERE user_id = $1 ORDER BY created_at, id
+SELECT id, user_id, endpoint, p256dh, auth, user_agent, failures, created_at, session_id FROM push_subscriptions WHERE user_id = $1 ORDER BY created_at, id
 `
 
 func (q *Queries) ListPushSubscriptions(ctx context.Context, userID uuid.UUID) ([]PushSubscription, error) {
@@ -70,6 +79,7 @@ func (q *Queries) ListPushSubscriptions(ctx context.Context, userID uuid.UUID) (
 			&i.UserAgent,
 			&i.Failures,
 			&i.CreatedAt,
+			&i.SessionID,
 		); err != nil {
 			return nil, err
 		}
@@ -91,11 +101,11 @@ func (q *Queries) ResetPushFailures(ctx context.Context, id uuid.UUID) error {
 }
 
 const savePushSubscription = `-- name: SavePushSubscription :one
-INSERT INTO push_subscriptions (id, user_id, endpoint, p256dh, auth, user_agent)
-VALUES ($1, $2, $3, $4, $5, $6)
+INSERT INTO push_subscriptions (id, user_id, endpoint, p256dh, auth, user_agent, session_id)
+VALUES ($1, $2, $3, $4, $5, $6, $7)
 ON CONFLICT (endpoint) DO UPDATE SET user_id = EXCLUDED.user_id, p256dh = EXCLUDED.p256dh,
-  auth = EXCLUDED.auth, user_agent = EXCLUDED.user_agent, failures = 0
-RETURNING id, user_id, endpoint, p256dh, auth, user_agent, failures, created_at
+  auth = EXCLUDED.auth, user_agent = EXCLUDED.user_agent, session_id = EXCLUDED.session_id, failures = 0
+RETURNING id, user_id, endpoint, p256dh, auth, user_agent, failures, created_at, session_id
 `
 
 type SavePushSubscriptionParams struct {
@@ -105,6 +115,7 @@ type SavePushSubscriptionParams struct {
 	P256dh    string
 	Auth      string
 	UserAgent *string
+	SessionID *uuid.UUID
 }
 
 // The endpoint identifies the browser, so signing in as someone else moves it.
@@ -116,6 +127,7 @@ func (q *Queries) SavePushSubscription(ctx context.Context, arg SavePushSubscrip
 		arg.P256dh,
 		arg.Auth,
 		arg.UserAgent,
+		arg.SessionID,
 	)
 	var i PushSubscription
 	err := row.Scan(
@@ -127,6 +139,7 @@ func (q *Queries) SavePushSubscription(ctx context.Context, arg SavePushSubscrip
 		&i.UserAgent,
 		&i.Failures,
 		&i.CreatedAt,
+		&i.SessionID,
 	)
 	return i, err
 }

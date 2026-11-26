@@ -68,6 +68,8 @@ export async function mockApi(page: Page, options: Partial<Mock> = {}): Promise<
       if (path === '/api/sources') return json({ id: 'src2' }, 201);
       if (path === '/api/push/vapid-public-key') return json({ public_key: 'BAAA' });
       if (path === '/api/push/subscriptions') return json({ id: 'sub1' }, 201);
+      if (path.startsWith("/api/push/subscriptions/")) return empty();
+      if (path === "/api/auth/logout") return empty();
       if (path === '/api/push/test') return json({ sent: 1, failed: 0 });
       return json({ error: { code: 'not_found', message: 'Not mocked.' } }, 404);
     }

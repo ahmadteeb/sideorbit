@@ -20,6 +20,18 @@ func (s *Service) methods(w http.ResponseWriter, _ *http.Request) {
 	})
 }
 
+// SessionID returns the web session the request's cookie belongs to, or the zero
+// UUID.
+func (s *Service) SessionID(r *http.Request) uuid.UUID {
+	c, err := r.Cookie(s.cookieName(cookieRefresh))
+	if err != nil {
+		return uuid.Nil
+	}
+	// A stale cookie just means no known session.
+	id, _ := s.q.GetRefreshTokenFamily(r.Context(), hashToken(c.Value))
+	return id
+}
+
 type sessionView struct {
 	ID         uuid.UUID `json:"id"`
 	Client     string    `json:"client"`
@@ -34,11 +46,7 @@ func (s *Service) listSessions(w http.ResponseWriter, r *http.Request) {
 		httpx.Internal(w, r, err)
 		return
 	}
-	var current uuid.UUID
-	if c, err := r.Cookie(s.cookieName(cookieRefresh)); err == nil {
-		// A stale cookie just means no session is marked as this one.
-		current, _ = s.q.GetRefreshTokenFamily(r.Context(), hashToken(c.Value))
-	}
+	current := s.SessionID(r)
 	out := make([]sessionView, 0, len(rows))
 	for _, row := range rows {
 		out = append(out, sessionView{row.FamilyID, row.Client, row.CreatedAt, row.LastUsedAt, row.FamilyID == current})
@@ -63,7 +71,10 @@ func (s *Service) revokeSession(w http.ResponseWriter, r *http.Request) {
 		}
 		var err error
 		n, err = q.RevokeUserFamily(r.Context(), db.RevokeUserFamilyParams{UserID: userID, FamilyID: id})
-		return err
+		if err != nil || n == 0 {
+			return err // not this account's session: leave its alerts alone
+		}
+		return q.DeleteSessionPushSubscriptions(r.Context(), id)
 	})
 	if err != nil {
 		httpx.Internal(w, r, err)

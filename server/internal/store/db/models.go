@@ -74,6 +74,7 @@ type PushSubscription struct {
 	UserAgent *string
 	Failures  int16
 	CreatedAt time.Time
+	SessionID *uuid.UUID
 }
 
 type RefreshEvent struct {

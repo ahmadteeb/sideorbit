@@ -5,6 +5,7 @@
   import ConfirmDialog from '$lib/components/ConfirmDialog.svelte';
   import Loaded from '$lib/components/Loaded.svelte';
   import PushSettings from '$lib/components/PushSettings.svelte';
+  import { disablePush } from '$lib/push';
   import { clearCache, resource } from '$lib/resource.svelte';
   import { dateTime } from '$lib/status';
   import { applyTheme, savedTheme, type Theme } from '$lib/theme';
@@ -26,6 +27,7 @@
   let error = $state('');
   let ending = $state.raw<Session | undefined>();
   let deleting = $state(false);
+  let signingOut = $state(false);
 
   async function leave() {
     clearCache();
@@ -34,12 +36,18 @@
 
   async function signOut() {
     error = '';
+    signingOut = true;
     try {
+      // The server drops the subscription with the session; this clears the
+      // browser's side too, and mustn't block signing out.
+      if ('serviceWorker' in navigator) await disablePush().catch(() => {});
       await api('POST', '/api/auth/logout');
       await leave();
     } catch (e) {
       const failure = asApiError(e);
       error = `${failure.message} ${failure.fix}`;
+    } finally {
+      signingOut = false;
     }
   }
 
@@ -85,8 +93,8 @@
             <dd>Up to {me.limits.max_devices}</dd>
           </dl>
           <div>
-            <button class="btn" type="button" onclick={signOut}>
-              <LogOut size={20} strokeWidth={1.75} aria-hidden="true" /> Sign out
+            <button class="btn" type="button" onclick={signOut} disabled={signingOut}>
+              <LogOut size={20} strokeWidth={1.75} aria-hidden="true" /> {signingOut ? 'Signing out…' : 'Sign out'}
             </button>
           </div>
           {#if error}<p class="danger-text" role="alert">{error}</p>{/if}

@@ -52,14 +52,17 @@ type Service struct {
 	q           *db.Queries
 	log         *slog.Logger
 	requireUser func(http.Handler) http.Handler
+	sessionOf   func(*http.Request) uuid.UUID
 	client      *http.Client // must refuse non-public addresses: endpoints are user input
 	retryDelays []time.Duration
 	tests       *ratelimit.Limiter
 }
 
-// New builds the service. client must be a safehttp client.
-func New(keys Keys, pool *pgxpool.Pool, log *slog.Logger, requireUser func(http.Handler) http.Handler, client *http.Client) *Service {
-	return &Service{keys: keys, q: db.New(pool), log: log, requireUser: requireUser, client: client,
+// New builds the service. client must be a safehttp client. sessionOf names the
+// caller's web session (the zero UUID if none), whose sign-out ends its alerts.
+func New(keys Keys, pool *pgxpool.Pool, log *slog.Logger, requireUser func(http.Handler) http.Handler,
+	sessionOf func(*http.Request) uuid.UUID, client *http.Client) *Service {
+	return &Service{keys: keys, q: db.New(pool), log: log, requireUser: requireUser, sessionOf: sessionOf, client: client,
 		retryDelays: []time.Duration{time.Second, 4 * time.Second},
 		tests:       ratelimit.New(5, time.Minute)}
 }
@@ -115,9 +118,13 @@ func (s *Service) subscribe(w http.ResponseWriter, r *http.Request) {
 		agent = strings.ToValidUTF8(agent[:200], "")
 	}
 	userID := auth.UserID(r.Context())
+	var session *uuid.UUID
+	if id := s.sessionOf(r); id != uuid.Nil {
+		session = &id
+	}
 	sub, err := s.q.SavePushSubscription(r.Context(), db.SavePushSubscriptionParams{
 		ID: uuid.Must(uuid.NewV7()), UserID: userID, Endpoint: req.Endpoint,
-		P256dh: req.Keys.P256dh, Auth: req.Keys.Auth, UserAgent: &agent,
+		P256dh: req.Keys.P256dh, Auth: req.Keys.Auth, UserAgent: &agent, SessionID: session,
 	})
 	if err == nil {
 		err = s.q.TrimPushSubscriptions(r.Context(), db.TrimPushSubscriptionsParams{UserID: userID, Keep: maxSubscriptions})

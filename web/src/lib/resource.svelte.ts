@@ -8,6 +8,16 @@ export function clearCache() {
   cache.clear();
 }
 
+// An installed app has no reload button: fetch again when the user comes back,
+// or countdowns keep running on old dates. Call during component setup.
+export function onReturn(run: () => void) {
+  $effect(() => {
+    const listener = () => document.visibilityState === 'visible' && run();
+    document.addEventListener('visibilitychange', listener);
+    return () => document.removeEventListener('visibilitychange', listener);
+  });
+}
+
 export interface Resource<T> {
   readonly data: T | undefined;
   readonly error: ApiError | undefined;
@@ -40,6 +50,7 @@ export function resource<T>(key: string, load: () => Promise<T>): Resource<T> {
     }
   }
   void reload();
+  onReturn(() => void reload());
 
   return {
     get data() {

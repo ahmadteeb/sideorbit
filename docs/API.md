@@ -76,7 +76,7 @@ The server **must reject** any field it doesn't know (`DisallowUnknownFields`) s
 | Method | Path | Notes |
 |---|---|---|
 | GET | `/api/push/vapid-public-key` | `{public_key}`. The push routes exist only when VAPID keys are configured |
-| POST | `/api/push/subscriptions` | Browser `PushSubscription` JSON → `{id}`. Same endpoint → same id. At most 10 per account |
+| POST | `/api/push/subscriptions` | Browser `PushSubscription` JSON → `{id}`. Same endpoint → same id (re-posting moves it to the caller). At most 10 per account. Signing that web session out removes it |
 | DELETE | `/api/push/subscriptions/{id}` | |
 | POST | `/api/push/test` | `{sent, failed}`; 409 with no subscriptions; 5/min |
 

@@ -43,15 +43,23 @@ describe('freshness', () => {
 });
 
 describe('summary', () => {
+  const noDate = { ...app(1), bundle_id: 'no.date', expires_at: null };
   test.each([
     ['all fresh', [app(100)], [device()], 'Your apps are up to date'],
+    ['unknown is not fresh', [app(100), noDate], [device()], 'Expiry not reported for 1 app'],
     ['one expiring', [app(100), app(10)], [device()], '1 app expires soon'],
     ['two expiring', [app(20), app(10)], [device()], '2 apps expire soon'],
     ['expired wins', [app(-1), app(10)], [device()], '1 app expired'],
     ['device problem', [app(100)], [device({ vpn_ok: false })], 'A device needs attention'],
     ['no apps', [], [device()], 'No apps reported yet']
   ])('%s', (_, apps, devices, label) => {
-    expect(summary(apps, devices, now).label).toBe(label);
+    expect(summary({ d: apps }, devices, now).label).toBe(label);
+  });
+  test('names the device and leads with its VPN', () => {
+    const pad = device({ id: 'p', name: 'Kitchen iPad', vpn_ok: false });
+    expect(summary({ d: [app(100)], p: [app(-1)] }, [device(), pad], now).next).toBe(
+      'Turn on LocalDevVPN on Kitchen iPad, then tap Refresh in Orbit.'
+    );
   });
 });
 

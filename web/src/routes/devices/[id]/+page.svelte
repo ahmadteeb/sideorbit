@@ -34,6 +34,16 @@
   }
 </script>
 
+{#snippet health(ok: boolean | null, good: string, bad: string)}
+  <StatusChip
+    status={ok === null
+      ? { tone: 'muted', icon: 'unknown', label: 'Not reported' }
+      : ok
+        ? { tone: 'primary', icon: 'fresh', label: good }
+        : { tone: 'warning', icon: 'action', label: bad }}
+  />
+{/snippet}
+
 <svelte:head><title>{detail.data?.device?.name ?? 'Device'} · Orbit</title></svelte:head>
 
 <div class="sections">
@@ -95,7 +105,7 @@
           <h2 id="history">Recent history</h2>
           {#if events.length}
             <EventList {events} showDevice={false} />
-            <a href="/activity">See all activity</a>
+            <a class="tap" href="/activity?device_id={device.id}">See all activity</a>
           {:else}
             <p class="muted">Nothing has happened yet.</p>
           {/if}
@@ -104,6 +114,10 @@
         <section class="card stack" aria-labelledby="about">
           <h2 id="about">This device</h2>
           <dl>
+            <dt>VPN</dt>
+            <dd>{@render health(device.vpn_ok, 'Connected', 'Off')}</dd>
+            <dt>Pairing</dt>
+            <dd>{@render health(device.pairing_ok, 'Valid', 'Needs replacing')}</dd>
             <dt>Model</dt>
             <dd class="mono">{device.model ?? 'Unknown'}</dd>
             <dt>iOS</dt>

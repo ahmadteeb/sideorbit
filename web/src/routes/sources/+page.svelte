@@ -11,6 +11,7 @@
 
   let url = $state('');
   let error = $state('');
+  let saveError = $state('');
   let busy = $state(false);
   let preview = $state.raw<SourcePreview | undefined>();
   let removing = $state.raw<Source | undefined>();
@@ -26,8 +27,11 @@
     preview = undefined;
     if (!validate()) return;
     busy = true;
+    announcement = '';
     try {
       preview = await api<SourcePreview>('POST', '/api/sources/preview', { url: url.trim() });
+      saveError = '';
+      announcement = `Found ${preview.name}.`;
     } catch (e) {
       const failure = asApiError(e);
       error = `${failure.message} ${failure.fix}`;
@@ -39,6 +43,7 @@
   async function save() {
     if (!preview) return;
     busy = true;
+    saveError = '';
     try {
       await api('POST', '/api/sources', { url: preview.url });
       announcement = `${preview.name} saved.`;
@@ -47,7 +52,7 @@
       await sources.reload();
     } catch (e) {
       const failure = asApiError(e);
-      error = `${failure.message} ${failure.fix}`;
+      saveError = `${failure.message} ${failure.fix}`;
     } finally {
       busy = false;
     }
@@ -87,13 +92,14 @@
       <button class="btn" type="submit" disabled={busy}>{busy && !preview ? 'Checking…' : 'Check source'}</button>
     </div>
     {#if preview}
-      <div class="stack" role="status">
+      <div class="stack">
         <h2>{preview.name}</h2>
         <p class="muted">
           {preview.app_count} {preview.app_count === 1 ? 'app' : 'apps'}{preview.apps.length ? `, including ${preview.apps.join(', ')}` : ''}.
         </p>
         <p class="muted">Only add sources you trust. Orbit doesn't check their apps.</p>
         <div><button class="btn btn-primary" type="button" onclick={save} disabled={busy}>{busy ? 'Saving…' : 'Save source'}</button></div>
+        {#if saveError}<p class="danger-text" role="alert">{saveError}</p>{/if}
       </div>
     {/if}
   </form>

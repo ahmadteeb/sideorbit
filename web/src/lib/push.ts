@@ -1,5 +1,5 @@
 // Web push: subscribe, unsubscribe and platform checks.
-import { api } from './api';
+import { ApiError, api } from './api';
 
 /** Why alerts can't be turned on here, or null when they can. */
 export type PushBlocker = 'install-ios' | 'unsupported' | 'denied' | null;
@@ -36,21 +36,43 @@ async function register(subscription: PushSubscription): Promise<string> {
   return (await api<{ id: string }>('POST', '/api/push/subscriptions', subscription.toJSON())).id;
 }
 
+/**
+ * Whether this browser gets this account's alerts. An existing subscription is
+ * registered again, which moves it here if someone else used the browser.
+ */
 export async function isSubscribed(): Promise<boolean> {
-  return Notification.permission === 'granted' && (await current()) !== null;
+  if (Notification.permission !== 'granted') return false;
+  const subscription = await current();
+  if (!subscription) return false;
+  await register(subscription);
+  return true;
+}
+
+// navigator.serviceWorker.ready never settles if registration failed.
+function ready(): Promise<ServiceWorkerRegistration> {
+  return Promise.race([
+    navigator.serviceWorker.ready,
+    new Promise<never>((_, reject) =>
+      setTimeout(
+        () => reject(new ApiError(0, 'no_worker', "This browser didn't start Orbit's alert service.", 'Reload the page and try again.')),
+        10_000
+      )
+    )
+  ]);
 }
 
 /** Asks for permission and subscribes. Call it from a tap, never on load. */
 export async function enablePush(): Promise<boolean> {
   if ((await Notification.requestPermission()) !== 'granted') return false;
   const { public_key } = await api<{ public_key: string }>('GET', '/api/push/vapid-public-key');
-  const registration = await navigator.serviceWorker.ready;
+  const registration = await ready();
   const subscription =
     (await registration.pushManager.getSubscription()) ??
-    (await registration.pushManager.subscribe({
-      userVisibleOnly: true,
-      applicationServerKey: decodeKey(public_key)
-    }));
+    (await registration.pushManager
+      .subscribe({ userVisibleOnly: true, applicationServerKey: decodeKey(public_key) })
+      .catch(() => {
+        throw new ApiError(0, 'subscribe', "The browser couldn't turn on alerts.", 'Check your connection and notification settings, then try again.');
+      }));
   await register(subscription);
   return true;
 }

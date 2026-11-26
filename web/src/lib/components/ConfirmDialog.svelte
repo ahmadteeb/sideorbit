@@ -18,8 +18,12 @@
 
   let busy = $state(false);
   let error = $state('');
+  let element: HTMLDialogElement;
 
+  // Closing through the element (not by unmounting) returns focus to the button
+  // that opened it. Its close event then unmounts the component.
   function open(dialog: HTMLDialogElement) {
+    element = dialog;
     dialog.showModal();
     return () => dialog.close();
   }
@@ -29,7 +33,7 @@
     error = '';
     try {
       await onconfirm();
-      onclose();
+      element.close();
     } catch (e) {
       const failure = asApiError(e);
       error = `${failure.message} ${failure.fix}`;
@@ -39,14 +43,14 @@
   }
 </script>
 
-<dialog {@attach open} aria-labelledby="confirm-title" {onclose}>
+<dialog {@attach open} aria-labelledby="confirm-title" {onclose} oncancel={(e) => busy && e.preventDefault()}>
   <div class="stack">
     <h2 id="confirm-title">{title}</h2>
     <p class="muted">{text}</p>
     {#if error}<p class="danger-text" role="alert">{error}</p>{/if}
     <div class="row">
       <!-- Cancel comes first, so it takes focus. -->
-      <button class="btn" type="button" onclick={onclose} disabled={busy}>Cancel</button>
+      <button class="btn" type="button" onclick={() => element.close()} disabled={busy}>Cancel</button>
       <button class="btn btn-danger" type="button" onclick={confirm} disabled={busy}>
         {busy ? 'Working…' : confirmLabel}
       </button>

@@ -149,6 +149,15 @@ svg {
   }
 }
 
+input[type='radio'] {
+  accent-color: var(--color-primary);
+}
+/* A link on its own line: give it a full-size target. */
+.tap {
+  display: inline-flex;
+  align-items: center;
+  min-height: var(--target-min);
+}
 label {
   display: block;
   font-weight: 600;
@@ -174,7 +183,7 @@ summary {
 }
 dl {
   display: grid;
-  grid-template-columns: minmax(7rem, auto) minmax(0, 1fr);
+  grid-template-columns: fit-content(40%) minmax(0, 1fr);
   gap: var(--space-1) var(--space-3);
   margin: 0;
 }

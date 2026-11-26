@@ -63,6 +63,7 @@ test('removing a device asks first and names it', async ({ page }) => {
   await expect(dialog.getByRole('button', { name: 'Cancel' })).toBeFocused();
   await dialog.getByRole('button', { name: 'Cancel' }).click();
   expect(mock.calls).not.toContain('DELETE /api/devices/d1');
+  await expect(page.getByRole('button', { name: 'Remove device' })).toBeFocused();
 
   await page.getByRole('button', { name: 'Remove device' }).click();
   await page.getByRole('button', { name: "Remove Ada's iPhone" }).click();
@@ -102,12 +103,23 @@ test('alerts are enabled only after a tap, then can be tested', async ({ page })
   await expect(enable).toBeVisible();
   expect(await page.evaluate(() => Notification.permission)).toBe('default');
   await enable.click();
-  await expect(page.getByText('Alerts are on for this browser.').first()).toBeVisible();
+  await expect(page.getByText('Alerts are on for this browser.')).toBeVisible();
   expect(mock.calls).toContain('POST /api/push/subscriptions');
   await page.getByRole('button', { name: 'Send test alert' }).click();
   await expect(page.getByText('Test alert sent.')).toBeVisible();
   await page.getByRole('button', { name: 'Turn off alerts' }).click();
   await expect.poll(() => mock.calls).toContain('DELETE /api/push/subscriptions/sub1');
+});
+
+test('signing out turns this browser\'s alerts off first', async ({ page }) => {
+  await mockPushBrowser(page);
+  const mock = await mockApi(page);
+  await page.goto('/settings');
+  await page.getByRole('button', { name: 'Enable alerts' }).click();
+  await expect(page.getByRole('button', { name: 'Turn off alerts' })).toBeVisible();
+  await page.getByRole('button', { name: 'Sign out', exact: true }).first().click();
+  await expect.poll(() => mock.calls).toContain('POST /api/auth/logout');
+  expect(mock.calls.indexOf('DELETE /api/push/subscriptions/sub1')).toBeLessThan(mock.calls.indexOf('POST /api/auth/logout'));
 });
 
 test.describe('on an iPhone in Safari', () => {
@@ -167,7 +179,7 @@ test('every control is at least 44px tall on a phone', async ({ page }) => {
     await page.goto(path);
     await ready(page);
     const small = await page.evaluate(() =>
-      [...document.querySelectorAll<HTMLElement>('button, .btn, select, summary, input:not([type=radio]), nav a')]
+      [...document.querySelectorAll<HTMLElement>('button, .btn, .tap, select, summary, input:not([type=radio]), nav a')]
         .filter((el) => !el.classList.contains('skip') && el.getClientRects().length)
         .filter((el) => el.getBoundingClientRect().height < 43.5)
         .map((el) => el.outerHTML.slice(0, 80))

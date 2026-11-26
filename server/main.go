@@ -80,7 +80,7 @@ func run() error {
 	}
 	var sender scheduler.Sender
 	if cfg.push.Public != "" {
-		alerts := push.New(cfg.push, db, log, accounts.RequireUser, safehttp.New(10*time.Second))
+		alerts := push.New(cfg.push, db, log, accounts.RequireUser, accounts.SessionID, safehttp.New(10*time.Second))
 		modules, sender = append(modules, alerts), alerts
 	} else {
 		log.Warn("web push is off: VAPID keys are not set")
