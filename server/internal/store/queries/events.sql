@@ -27,3 +27,10 @@ JOIN devices d ON d.id = e.device_id
 WHERE d.user_id = sqlc.arg(user_id) AND e.kind = 'refresh' AND e.occurred_at >= sqlc.arg(since)::timestamptz
 GROUP BY 1
 ORDER BY 1;
+
+-- name: TrimDeviceEvents :exec
+-- Keep each device's newest events, whatever dates a client invents.
+DELETE FROM refresh_events WHERE id IN (
+  SELECT e.id FROM refresh_events e WHERE e.device_id = $1
+  ORDER BY e.occurred_at DESC, e.id DESC OFFSET sqlc.arg(keep)::int
+);

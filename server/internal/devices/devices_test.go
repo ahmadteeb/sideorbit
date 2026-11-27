@@ -1,6 +1,7 @@
 package devices_test
 
 import (
+	"context"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -161,6 +162,23 @@ func TestReport(t *testing.T) {
 	}
 }
 
+func TestHistoryIsBounded(t *testing.T) {
+	e := newEnv(t)
+	id := e.register(t, "client-id-one").ID
+	if _, err := e.pool.Exec(context.Background(), "INSERT INTO refresh_events (id, device_id, kind, result, occurred_at) SELECT gen_random_uuid(), $1, 'refresh', 'success', now() - i * interval '1 minute' FROM generate_series(1, 1005) i", id); err != nil {
+		t.Fatal(err)
+	}
+	body := `{"reported_at":"` + stamp(0) + `","event":{"kind":"refresh","result":"failure"}}`
+	if rec := apitest.Do(t, e.h, e.owner, "POST", "/api/devices/"+id+"/report", body); rec.Code != 204 {
+		t.Fatalf("report: %d %s", rec.Code, rec.Body)
+	}
+	total := apitest.Count(t, e.pool, "SELECT count(*) FROM refresh_events")
+	newest := apitest.Count(t, e.pool, "SELECT count(*) FROM refresh_events WHERE result = 'failure'")
+	if total != 1000 || newest != 1 {
+		t.Errorf("%d events, newest kept = %d", total, newest)
+	}
+}
+
 func TestReportRejects(t *testing.T) {
 	e := newEnv(t)
 	id := e.register(t, "client-id-one").ID
@@ -180,6 +198,8 @@ func TestReportRejects(t *testing.T) {
 		{"barely masked label", with(`"apple_account":{"label":"john***smith@icloud.com"}`)},
 		{"free-text error", with(`"event":{"kind":"refresh","result":"failure","error_code":"bad password for john"}`)},
 		{"text after the mask", with(`"apple_account":{"label":"***@my secret words"}`)},
+		{"a code that is only digits", with(`"event":{"kind":"refresh","result":"failure","error_code":"123456"}`)},
+		{"source with a query", with(`"apps":[{"bundle_id":"a.b","name":"x","source_url":"https://example.com/s?token=abc"}]`)},
 		{"bad team id", with(`"apple_account":{"team_id":"abc"}`)},
 		{"bad kind", with(`"event":{"kind":"steal","result":"success"}`)},
 		{"bad result", with(`"event":{"kind":"refresh","result":"success|failure"}`)},

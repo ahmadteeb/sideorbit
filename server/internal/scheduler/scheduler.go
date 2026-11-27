@@ -7,16 +7,22 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"sync"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"github.com/ahmadteeb/sideorbit/server/internal/metrics"
 	"github.com/ahmadteeb/sideorbit/server/internal/push"
 	"github.com/ahmadteeb/sideorbit/server/internal/store/db"
 )
 
-const interval = 15 * time.Minute
+const (
+	interval = 15 * time.Minute
+	// parallel alerts, so one slow account doesn't queue everyone behind it.
+	parallel = 8
+)
 
 // Sender delivers a notification to an account.
 type Sender interface {
@@ -44,6 +50,8 @@ func (s *Scheduler) Run(ctx context.Context) {
 	for {
 		if err := s.Tick(ctx); err != nil && ctx.Err() == nil {
 			s.log.Error("scheduled jobs failed", "err", err)
+		} else if err == nil {
+			metrics.SchedulerSuccess.SetToCurrentTime()
 		}
 		select {
 		case <-ctx.Done():
@@ -155,10 +163,25 @@ func (s *Scheduler) expiryAlerts(ctx context.Context) error {
 		g.claims = append(g.claims, db.ClaimAlertParams{DeviceID: app.DeviceID, BundleID: app.BundleID,
 			Kind: fmt.Sprintf("expiry_%dh", hours), WindowStart: window})
 	}
-	var errs []error
+	alerts := make([]alert, 0, len(groups))
 	for _, g := range groups {
-		errs = append(errs, s.send(ctx, *g))
+		alerts = append(alerts, *g)
 	}
+	return s.sendAll(ctx, alerts)
+}
+
+func (s *Scheduler) sendAll(ctx context.Context, alerts []alert) error {
+	errs := make([]error, len(alerts))
+	slots := make(chan struct{}, parallel)
+	var wg sync.WaitGroup
+	for i, a := range alerts {
+		slots <- struct{}{}
+		wg.Go(func() {
+			defer func() { <-slots }()
+			errs[i] = s.send(ctx, a)
+		})
+	}
+	wg.Wait()
 	return errors.Join(errs...)
 }
 
@@ -167,9 +190,9 @@ func (s *Scheduler) silentAlerts(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("silent devices: %w", err)
 	}
-	var errs []error
+	alerts := make([]alert, 0, len(devices))
 	for _, d := range devices {
-		errs = append(errs, s.send(ctx, alert{
+		alerts = append(alerts, alert{
 			userID: d.UserID,
 			claims: []db.ClaimAlertParams{{DeviceID: d.DeviceID, Kind: "device_silent", WindowStart: d.LastSeenAt}},
 			msg: func(int) push.Message {
@@ -179,7 +202,7 @@ func (s *Scheduler) silentAlerts(ctx context.Context) error {
 					URL:   "/devices/" + d.DeviceID.String(),
 				}
 			},
-		}))
+		})
 	}
-	return errors.Join(errs...)
+	return s.sendAll(ctx, alerts)
 }

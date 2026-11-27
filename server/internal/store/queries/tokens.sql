@@ -48,5 +48,7 @@ ORDER BY last_used_at DESC, family_id;
 -- name: RevokeUserFamily :execrows
 UPDATE refresh_tokens SET revoked_at = now() WHERE user_id = $1 AND family_id = $2 AND revoked_at IS NULL;
 
--- name: GetRefreshTokenFamily :one
-SELECT family_id FROM refresh_tokens WHERE token_hash = $1;
+-- name: LiveSession :one
+-- The session behind a refresh token, if it is this account's and still usable.
+SELECT family_id FROM refresh_tokens
+WHERE token_hash = $1 AND user_id = $2 AND revoked_at IS NULL AND expires_at > now();

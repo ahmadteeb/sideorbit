@@ -60,6 +60,11 @@ func (s *Service) deleteMe(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	err = pgx.BeginFunc(ctx, s.pool, func(tx pgx.Tx) error {
 		q := s.q.WithTx(tx)
+		// Registrations and rotations lock the account too, so none can slip a row
+		// in while it is being emptied.
+		if _, err := q.LockUser(ctx, id); err != nil {
+			return err
+		}
 		user, err := q.GetActiveUser(ctx, id)
 		if err != nil {
 			return err

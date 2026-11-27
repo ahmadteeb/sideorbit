@@ -58,7 +58,7 @@ The server **must reject** any field it doesn't know (`DisallowUnknownFields`) s
 → 204. Only `reported_at` is required (within the last 90 days; at most 10 minutes ahead). Limits: 60 reports/min per user, 100 apps.
 - `apps` present replaces the inventory (an empty list clears it); absent leaves it unchanged.
 - A report older than the newest one already received only adds its event to history. Resending a report adds nothing.
-- `label` must be masked (at least `***`, at most 4 visible characters before `@`). `error_code` is `UPPER_SNAKE_CASE`, never free text. `source_url` is https without credentials. `trigger` may also be `setup`.
+- `label` must be masked (at least `***`, at most 4 visible characters before `@`). `error_code` is `UPPER_SNAKE_CASE` starting with a letter, never free text. `source_url` is https without credentials, query or fragment. A device keeps its newest 1000 events. `trigger` may also be `setup`.
 
 ## Apps, events, sources
 
@@ -77,7 +77,7 @@ The server **must reject** any field it doesn't know (`DisallowUnknownFields`) s
 | Method | Path | Notes |
 |---|---|---|
 | GET | `/api/push/vapid-public-key` | `{public_key}`. The push routes exist only when VAPID keys are configured |
-| POST | `/api/push/subscriptions` | Browser `PushSubscription` JSON → `{id}`. Same endpoint → same id (re-posting moves it to the caller). At most 10 per account. Signing that web session out removes it |
+| POST | `/api/push/subscriptions` | Browser `PushSubscription` JSON → `{id}`. Same endpoint → same id (re-posting moves it to the caller). At most 10 per account. Needs a live web session (403 `session_required` otherwise); signing it out or revoking it removes the subscription. A session that simply expires keeps its alerts |
 | DELETE | `/api/push/subscriptions/{id}` | |
 | POST | `/api/push/test` | `{sent, failed}`; 409 with no subscriptions; 5/min |
 
@@ -99,6 +99,8 @@ Proxies to the internal `anisette-v3:6969`. Requires a bearer token; the WebSock
 - Send `X-Orbit-Device: <device id>` once the device is registered; an unknown or foreign id → 403 `unknown_device`.
 - The upstream receives only content and WebSocket headers. A provisioning session is closed after 2 minutes; `get_headers` bodies are at most 64 KB.
 - 502 `anisette_unavailable` if the upstream is down.
+
+Load test (2026-11-27, `deploy/loadtest/gateway.js`, containers capped at 2.5 CPUs in total, over loopback): 300 `client_info`/s plus 2 sessions/s with no failures, p95 1.4 ms, orbit-server using 12 MB. The gateway is not the bottleneck; the quotas below are abuse policy, not capacity, so they were left unchanged. Provisioning against Apple was not load-tested, on purpose.
 
 Limits (defaults, configurable): 60 requests/min per user across `client_info` and `get_headers`, 5 provisioning sessions/hour per user, 3 per hour per device, 120 requests/min per IP. Provisioning is also capped at 10/hour per IP and 100/hour in total, so that recreating accounts doesn't reset the quota. The per-device limit applies only when `X-Orbit-Device` is sent (a first sign-in may not have a device yet). 429 carries `Retry-After`. Logs contain user ID, device ID, endpoint, status and latency. **Never** request or response bodies.
 

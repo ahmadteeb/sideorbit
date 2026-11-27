@@ -5,6 +5,7 @@ import (
 	"log/slog"
 	"slices"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -17,11 +18,14 @@ import (
 )
 
 type fakeSender struct {
+	mu     sync.Mutex // alerts are sent in parallel
 	titles []string
 	fail   bool
 }
 
 func (f *fakeSender) Send(_ context.Context, _ uuid.UUID, m push.Message) (int, int, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
 	if f.fail {
 		return 0, 1, nil
 	}

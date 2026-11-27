@@ -25,6 +25,7 @@ func TestLoadConfig(t *testing.T) {
 		{"localhost over http", map[string]string{"PUBLIC_URL": "http://localhost:8080"}, ""},
 		{"smtp only", map[string]string{"GITHUB_CLIENT_ID": "", "GITHUB_CLIENT_SECRET": "", "SMTP_HOST": "smtp.example.com", "SMTP_FROM": "a@example.com"}, ""},
 		{"no database", map[string]string{"DATABASE_URL": ""}, "DATABASE_URL"},
+		{"example database password", map[string]string{"DATABASE_URL": "password='change-me-openssl'"}, "example secret"},
 		{"upstream without scheme", map[string]string{"ANISETTE_UPSTREAM": "anisette:6969"}, "ANISETTE_UPSTREAM"},
 		{"bad level", map[string]string{"LOG_LEVEL": "loud"}, "LOG_LEVEL"},
 		{"public http", map[string]string{"PUBLIC_URL": "http://orbit.example.com"}, "https"},

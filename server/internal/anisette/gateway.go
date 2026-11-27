@@ -252,6 +252,19 @@ func (g *Gateway) handle(path string, websocket bool) http.HandlerFunc {
 
 		ctx := context.WithValue(r.Context(), callKey{}, c)
 		if websocket {
+			// Before the quotas: a request that can't reach anisette costs nothing,
+			// or anyone could use up everybody's share with plain GETs.
+			if !strings.EqualFold(r.Header.Get("Upgrade"), "websocket") {
+				c.status = http.StatusUpgradeRequired
+				w.Header().Set("Upgrade", "websocket")
+				httpx.Error(w, c.status, "upgrade_required", "This endpoint is a WebSocket.", "")
+				return
+			}
+			if r.ContentLength != 0 {
+				c.status = http.StatusBadRequest
+				httpx.Error(w, c.status, "invalid_request", "A WebSocket request has no body.", "")
+				return
+			}
 			if !g.provisionUser.Allow(userID.String()) {
 				limited("user", time.Hour)
 				return
@@ -267,17 +280,6 @@ func (g *Gateway) handle(path string, websocket bool) http.HandlerFunc {
 			// Last, so refused callers don't use up everyone's share.
 			if !g.provisionTotal.Allow("") {
 				limited("total", time.Hour)
-				return
-			}
-			if !strings.EqualFold(r.Header.Get("Upgrade"), "websocket") {
-				c.status = http.StatusUpgradeRequired
-				w.Header().Set("Upgrade", "websocket")
-				httpx.Error(w, c.status, "upgrade_required", "This endpoint is a WebSocket.", "")
-				return
-			}
-			if r.ContentLength != 0 {
-				c.status = http.StatusBadRequest
-				httpx.Error(w, c.status, "invalid_request", "A WebSocket request has no body.", "")
 				return
 			}
 			var cancel context.CancelFunc

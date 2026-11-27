@@ -4,6 +4,10 @@ on:
   push:
     branches: [main]
   pull_request:
+  workflow_call: # release.yml builds the IPA with this
+    inputs:
+      version:
+        type: string
 
 permissions:
   contents: read
@@ -28,10 +32,12 @@ jobs:
       - run: xcodegen generate
         working-directory: ios
       - name: Build (unsigned)
+        env:
+          VERSION: ${{ inputs.version }}
         run: >
           xcodebuild -project ios/Orbit.xcodeproj -scheme Orbit -configuration Release
           -destination 'generic/platform=iOS' -derivedDataPath ios/build
-          CODE_SIGNING_ALLOWED=NO build
+          CODE_SIGNING_ALLOWED=NO ${VERSION:+MARKETING_VERSION="$VERSION"} build
       - name: Package Orbit.ipa
         run: |
           mkdir Payload

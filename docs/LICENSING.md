@@ -7,6 +7,8 @@
 | Go modules: chi, pgx, goose, golang-jwt, webpush-go | MIT | Compatible with AGPL-3.0; license texts ship with the modules |
 | Go modules: golang.org/x/oauth2, golang.org/x/time, google/uuid | BSD-3-Clause | Compatible with AGPL-3.0 |
 | `coder/websocket` (tests only) | ISC | Not part of the server binary |
+| `prometheus/client_golang` and its libraries | Apache-2.0 (protobuf BSD-3-Clause) | Compatible with AGPL-3.0 |
+| `grafana/k6` | AGPL-3.0 | A tool run by operators; not part of Orbit |
 | `nab138/iloader` | MIT | Can be forked into `desktop/`; keep its copyright notice |
 | `Dadoum/anisette-v3-server` | **No license file found in the repo** (checked Nov 2026) | We **run the unmodified upstream Docker image** and don't copy or modify its code. Don't vendor or fork it without permission from the author |
 | LiveContainer | Verify in Phase 5 (P05) | Decide the integration approach after checking |

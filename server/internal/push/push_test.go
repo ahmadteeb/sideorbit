@@ -126,6 +126,15 @@ func TestSubscribeRejects(t *testing.T) {
 	}
 }
 
+func TestSubscribingNeedsALiveSession(t *testing.T) {
+	e := newEnv(t)
+	e.svc.sessionOf = func(*http.Request) uuid.UUID { return uuid.Nil }
+	rec := apitest.Do(t, e.h, e.user, "POST", "/api/push/subscriptions", subscription(t, e.fake.URL+"/x"))
+	if rec.Code != http.StatusForbidden || e.count(t, "") != 0 {
+		t.Errorf("got %d, %d stored", rec.Code, e.count(t, ""))
+	}
+}
+
 func TestSubscriptionLifecycle(t *testing.T) {
 	e := newEnv(t)
 	other := apitest.NewUser(t, e.pool)
