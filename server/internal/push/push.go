@@ -12,6 +12,7 @@ import (
 	"log/slog"
 	"net/http"
 	"net/url"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -51,6 +52,29 @@ type Message struct {
 	URL   string `json:"url"` // path to open on tap
 }
 
+// pushHosts are the browser vendors' push services (D39). A subscription's
+// endpoint is user input, and the server has no reason to POST anywhere else.
+var pushHosts = []string{
+	"fcm.googleapis.com",                // Chrome, Edge on Android, Brave, Opera
+	"updates.push.services.mozilla.com", // Firefox
+	".push.apple.com",                   // Safari and iOS
+	".notify.windows.com",               // Edge on Windows
+}
+
+// knownPushService reports whether u is one of them, on the HTTPS port.
+func knownPushService(u *url.URL) bool {
+	host := strings.ToLower(u.Hostname())
+	if u.Port() != "" && u.Port() != "443" {
+		return false
+	}
+	return slices.ContainsFunc(pushHosts, func(known string) bool {
+		if strings.HasPrefix(known, ".") {
+			return strings.HasSuffix(host, known)
+		}
+		return host == known
+	})
+}
+
 // Service serves /api/push and sends notifications.
 type Service struct {
 	keys        Keys
@@ -60,6 +84,7 @@ type Service struct {
 	sessionOf   func(*http.Request) uuid.UUID
 	client      *http.Client // must refuse non-public addresses: endpoints are user input
 	retryDelays []time.Duration
+	allowed     func(*url.URL) bool // knownPushService, except in tests
 	tests       *ratelimit.Limiter
 }
 
@@ -69,6 +94,7 @@ func New(keys Keys, pool *pgxpool.Pool, log *slog.Logger, requireUser func(http.
 	sessionOf func(*http.Request) uuid.UUID, client *http.Client) *Service {
 	return &Service{keys: keys, q: db.New(pool), log: log, requireUser: requireUser, sessionOf: sessionOf, client: client,
 		retryDelays: []time.Duration{time.Second, 4 * time.Second},
+		allowed:     knownPushService,
 		tests:       ratelimit.New(5, time.Minute)}
 }
 
@@ -113,6 +139,11 @@ func (s *Service) subscribe(w http.ResponseWriter, r *http.Request) {
 			secret, err = decodeKey(req.Keys.Auth)
 		}
 		valid = err == nil && len(secret) == 16
+	}
+	if valid && !s.allowed(u) {
+		s.log.Warn("push endpoint refused", "host", u.Hostname())
+		httpx.Error(w, http.StatusBadRequest, "unsupported_push_service", "This browser's alert service isn't supported.", "Use Safari, Chrome, Edge or Firefox.")
+		return
 	}
 	if !valid {
 		httpx.Error(w, http.StatusBadRequest, "invalid_subscription", "That isn't a valid push subscription.", "Turn alerts off and on again.")

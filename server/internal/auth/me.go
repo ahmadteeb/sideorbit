@@ -1,10 +1,12 @@
 package auth
 
 import (
+	"context"
 	"net/http"
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 
 	"github.com/ahmadteeb/sideorbit/server/internal/httpx"
@@ -69,22 +71,10 @@ func (s *Service) deleteMe(w http.ResponseWriter, r *http.Request) {
 		if err != nil {
 			return err
 		}
-		if err := q.DeleteUserLoginCodes(ctx, db.DeleteUserLoginCodesParams{UserID: &id, Email: user.Email}); err != nil {
+		if err := wipe(ctx, q, user); err != nil {
 			return err
 		}
-		for _, remove := range []func() error{
-			func() error { return q.DeleteIdentities(ctx, id) },
-			func() error { return q.DeleteUserRefreshTokens(ctx, id) },
-			func() error { return q.DeleteUserDevices(ctx, id) }, // apps, events and alerts cascade
-			func() error { return q.DeleteUserSources(ctx, id) },
-			func() error { return q.DeleteUserPushSubscriptions(ctx, id) },
-			func() error { return q.AnonymizeUser(ctx, id) },
-		} {
-			if err := remove(); err != nil {
-				return err
-			}
-		}
-		return nil
+		return q.AnonymizeUser(ctx, id)
 	})
 	if err != nil {
 		httpx.Internal(w, r, err)
@@ -93,4 +83,21 @@ func (s *Service) deleteMe(w http.ResponseWriter, r *http.Request) {
 	s.log.Info("account deleted", "user_id", id)
 	s.clearSessionCookies(w)
 	w.WriteHeader(http.StatusNoContent)
+}
+
+// wipe removes everything an account holds: sign-in methods, sessions, devices
+// (apps, events and alerts cascade), sources and push subscriptions.
+func wipe(ctx context.Context, q *db.Queries, user db.User) error {
+	id := user.ID
+	if err := q.DeleteUserLoginCodes(ctx, db.DeleteUserLoginCodesParams{UserID: &id, Email: user.Email}); err != nil {
+		return err
+	}
+	for _, remove := range []func(context.Context, uuid.UUID) error{
+		q.DeleteIdentities, q.DeleteUserRefreshTokens, q.DeleteUserDevices, q.DeleteUserSources, q.DeleteUserPushSubscriptions,
+	} {
+		if err := remove(ctx, id); err != nil {
+			return err
+		}
+	}
+	return nil
 }

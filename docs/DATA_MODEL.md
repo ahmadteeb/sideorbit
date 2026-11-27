@@ -116,6 +116,6 @@ CREATE TABLE alerts_sent (                      -- dedupe for scheduler
 );
 ```
 
-Later migrations: `0002` adds `devices.last_report_at timestamptz` (the device's clock at its newest report). `0003` adds `push_subscriptions.session_id uuid` (the web session that turned alerts on; signing it out deletes the subscription).
+Later migrations: `0002` adds `devices.last_report_at timestamptz` (the device's clock at its newest report). `0004` adds `users.email_proven_at timestamptz` (NULL until the holder shows control of the mailbox). `0003` adds `push_subscriptions.session_id uuid` (the web session that turned alerts on; signing it out deletes the subscription).
 
 Retention: `refresh_events` older than 90 days is pruned nightly. `login_codes` and `refresh_tokens` are pruned a day after they expire; `alerts_sent` follows the event retention. Pruning runs with the scheduler, every 15 minutes.

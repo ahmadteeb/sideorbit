@@ -226,6 +226,10 @@ func (s *Service) oauthCallback(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	user, err := s.findOrCreateUser(r.Context(), p.name, id)
+	if errors.Is(err, errNeedsClaim) {
+		s.askAboutAccount(w, r, user, p.name, id, t)
+		return
+	}
 	if errors.Is(err, errAccountExists) {
 		fail("account_exists", err)
 		return

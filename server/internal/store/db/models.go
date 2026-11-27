@@ -109,9 +109,10 @@ type Source struct {
 }
 
 type User struct {
-	ID          uuid.UUID
-	Email       *string
-	DisplayName *string
-	CreatedAt   time.Time
-	DeletedAt   *time.Time
+	ID            uuid.UUID
+	Email         *string
+	DisplayName   *string
+	CreatedAt     time.Time
+	DeletedAt     *time.Time
+	EmailProvenAt *time.Time
 }

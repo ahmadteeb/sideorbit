@@ -9,6 +9,7 @@ import (
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"strings"
 	"sync"
 	"testing"
@@ -73,6 +74,7 @@ func newEnv(t *testing.T) env {
 		slog.New(slog.DiscardHandler), apitest.RequireUser,
 		func(*http.Request) uuid.UUID { return testSession }, fake.Client())
 	svc.retryDelays = []time.Duration{0, 0}
+	svc.allowed = func(*url.URL) bool { return true } // the fake service is on loopback
 	return env{apitest.Router(svc), svc, pool, fake, apitest.NewUser(t, pool)}
 }
 
@@ -229,5 +231,39 @@ func TestTestEndpoint(t *testing.T) {
 	post()
 	if code, _ := post(); code != 429 {
 		t.Errorf("sixth call: %d", code)
+	}
+}
+
+func TestKnownPushServices(t *testing.T) {
+	tests := map[string]bool{
+		"https://fcm.googleapis.com/fcm/send/x":                true,
+		"https://web.push.apple.com/x":                         true,
+		"https://updates.push.services.mozilla.com/wpush/v2/x": true,
+		"https://wns2-bl2p.notify.windows.com/w/?token=x":      true,
+		"https://WEB.PUSH.APPLE.COM:443/x":                     true,
+		"https://example.com/x":                                false,
+		"https://fcm.googleapis.com.evil.example/x":            false,
+		"https://evilpush.apple.com/x":                         false,
+		"https://push.apple.com/x":                             false,
+		"https://fcm.googleapis.com:8443/x":                    false,
+		"https://evil.example/fcm.googleapis.com":              false,
+	}
+	for raw, want := range tests {
+		u, err := url.Parse(raw)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got := knownPushService(u); got != want {
+			t.Errorf("%s: %v", raw, got)
+		}
+	}
+}
+
+func TestUnknownPushServiceIsRefused(t *testing.T) {
+	e := newEnv(t)
+	e.svc.allowed = knownPushService
+	rec := apitest.Do(t, e.h, e.user, "POST", "/api/push/subscriptions", subscription(t, "https://push.example.com/x"))
+	if rec.Code != 400 || !strings.Contains(rec.Body.String(), "unsupported_push_service") || e.count(t, "") != 0 {
+		t.Errorf("got %d %s", rec.Code, rec.Body)
 	}
 }

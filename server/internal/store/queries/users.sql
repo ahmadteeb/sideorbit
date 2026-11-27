@@ -13,7 +13,14 @@ JOIN identities i ON i.user_id = u.id
 WHERE i.provider = $1 AND i.subject = $2 AND u.deleted_at IS NULL;
 
 -- name: CreateUser :one
-INSERT INTO users (id, email, display_name) VALUES ($1, $2, $3) RETURNING *;
+INSERT INTO users (id, email, display_name, email_proven_at)
+VALUES ($1, $2, $3, CASE WHEN sqlc.arg(proven)::boolean THEN now() END) RETURNING *;
+
+-- name: MarkEmailProven :exec
+UPDATE users SET email_proven_at = now() WHERE id = $1;
+
+-- name: ClearDisplayName :exec
+UPDATE users SET display_name = NULL WHERE id = $1;
 
 -- name: CreateIdentity :exec
 INSERT INTO identities (id, user_id, provider, subject) VALUES ($1, $2, $3, $4)
