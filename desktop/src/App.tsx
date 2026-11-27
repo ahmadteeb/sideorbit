@@ -7,8 +7,6 @@ import { open as openFileDialog } from "@tauri-apps/plugin-dialog";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import {
   sideloadOperation,
-  installSideStoreOperation,
-  installLiveContainerOperation,
   Operation,
   OperationState,
   OperationUpdate,
@@ -22,8 +20,7 @@ import { AppIds } from "./pages/AppIds";
 import { Settings } from "./pages/Settings";
 import { Pairing } from "./pages/Pairing";
 import { getVersion } from "@tauri-apps/api/app";
-import { checkForUpdates } from "./update";
-import logo from "./iloader.svg";
+import logo from "./orbit/icon.svg"; // ORBIT
 import { GlassCard } from "./components/GlassCard";
 import { useTranslation } from "react-i18next";
 import { usePlatform } from "./PlatformContext";
@@ -66,10 +63,6 @@ function App() {
       setVersion(version);
     };
     fetchVersion();
-  }, []);
-
-  useEffect(() => {
-    checkForUpdates();
   }, []);
 
   const shortcutLabel = useCallback(
@@ -185,8 +178,8 @@ function App() {
           <div className="title-block">
             <img src={logo} alt={t("app.logo_alt")} className="logo" />
             <div>
-              <h1 className="title">iloader</h1>
-              <p className="subtitle">{t("subtitle")}</p>
+              <h1 className="title">Orbit Setup</h1>
+              <p className="subtitle">Put Orbit on your iPhone</p>
             </div>
           </div>
           <span className="version-pill">
@@ -194,32 +187,26 @@ function App() {
           </span>
         </div>
         <div className="header-actions">
-          <button
-            className="toolbar-button"
-            onClick={async () => {
-              try {
-                await openUrl("https://github.com/sponsors/nab138");
-              } catch (error) {
-                console.error("Failed to open GitHub link", error);
-                toast.error(t("app.open_github_failed"));
-              }
-            }}
-          >
-            ❤️ {t("app.donate")}
-          </button>
-          <button
-            className="toolbar-button"
-            onClick={async () => {
-              try {
-                await openUrl("https://github.com/nab138/iloader");
-              } catch (error) {
-                console.error("Failed to open GitHub link", error);
-                toast.error(t("app.open_github_failed"));
-              }
-            }}
-          >
-            {t("app.github")}
-          </button>
+          {/* ORBIT: credit upstream, link our source (AGPL). */}
+          {[
+            ["Based on iloader", "https://github.com/nab138/iloader"],
+            ["Source code", "https://github.com/ahmadteeb/sideorbit"],
+          ].map(([label, url]) => (
+            <button
+              key={url}
+              className="toolbar-button"
+              onClick={async () => {
+                try {
+                  await openUrl(url);
+                } catch (error) {
+                  console.error("Failed to open link", error);
+                  toast.error(t("app.open_github_failed"));
+                }
+              }}
+            >
+              {label}
+            </button>
+          ))}
         </div>
       </header>
       <div className="workspace-body">
@@ -314,66 +301,12 @@ function App() {
           <section className="workspace-section">
             <div className="section-header">
               <p className="section-label">{t("app.installers")}</p>
-              <span className="section-hint">{t("app.choose_build")}</span>
+              <span className="section-hint">Download it from your Orbit release</span>
             </div>
             <GlassCard className="panel">
               <div className="action-row single-row">
-                <button
-                  onClick={() => {
-                    if (!ensuredLoggedIn() || !ensureSelectedDevice()) return;
-                    startOperation(installSideStoreOperation, {
-                      nightly: false,
-                      liveContainer: false,
-                    }).catch((e) => {
-                      console.log(e.type);
-                      console.error(e.message);
-                    });
-                  }}
-                >
-                  {t("app.sidestore_stable")}
-                </button>
-                <button
-                  onClick={() => {
-                    if (!ensuredLoggedIn() || !ensureSelectedDevice()) return;
-                    startOperation(installSideStoreOperation, {
-                      nightly: true,
-                      liveContainer: false,
-                    }).catch((e) => {
-                      console.log(e.type);
-                      console.error(e.message);
-                    });
-                  }}
-                >
-                  {t("app.sidestore_nightly")}
-                </button>
-                <button
-                  onClick={() => {
-                    if (!ensuredLoggedIn() || !ensureSelectedDevice()) return;
-                    startOperation(installLiveContainerOperation, {
-                      nightly: false,
-                      liveContainer: true,
-                    }).catch((e) => {
-                      console.log(e.type);
-                      console.error(e.message);
-                    });
-                  }}
-                >
-                  {t("app.livecontainer_sidestore_stable")}
-                </button>
-                <button
-                  onClick={() => {
-                    if (!ensuredLoggedIn() || !ensureSelectedDevice()) return;
-                    startOperation(installLiveContainerOperation, {
-                      nightly: true,
-                      liveContainer: true,
-                    }).catch((e) => {
-                      console.log(e.type);
-                      console.error(e.message);
-                    });
-                  }}
-                >
-                  {t("app.livecontainer_sidestore_nightly")}
-                </button>
+                {/* ORBIT: upstream's SideStore and LiveContainer downloads are
+                    removed. Until releases exist, pick Orbit.ipa yourself. */}
                 <button
                   onClick={async () => {
                     if (!ensuredLoggedIn() || !ensureSelectedDevice()) return;
@@ -392,7 +325,7 @@ function App() {
                     });
                   }}
                 >
-                  {t("app.import_ipa")}
+                  Choose Orbit.ipa…
                 </button>
               </div>
             </GlassCard>

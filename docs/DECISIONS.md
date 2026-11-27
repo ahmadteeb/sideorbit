@@ -38,14 +38,16 @@ Format: **ID · Decision** · *Why* · Alternatives rejected. Add new entries at
 | D32 | **iOS and desktop sign-ins end on a "Continue as …" page before any code is issued** | Another app can start its own flow and claim `orbit://`; this makes a silent sign-in impossible. A custom scheme can't be made exclusive, and Associated Domains needs a paid account (hard rule 4), so a user who presses the button for an app they didn't open is still exposed | Redirecting straight away |
 | D33 | **Each device keeps its newest 1000 history events** | Invented timestamps could otherwise fill the disk; real use stays far below this in 90 days | A per-day cap |
 | D34 | **Releases publish only from a tag on a commit in `main`, through the `release` environment; running the workflow by hand is a dry run** | A tag alone shouldn't publish unreviewed code | Publishing on any tag |
+| D35 | **Orbit Setup reaches anisette through a proxy on `127.0.0.1` that adds the Orbit token; the path carries a random secret** | The sign-in library (`isideload`) takes a URL but can't send headers. No fork needed, and anisette traffic holds no Apple credentials | Forking `isideload`; a public anisette server (D04) |
+| D36 | **Orbit Setup drops upstream's updater, developer tools, public anisette list and SideStore/LiveContainer downloads, and uses its own name, icon and keyring entries** | The updater would install iloader over it; devtools don't belong in an app that handles Apple passwords; `LICENSE-BRANDING` reserves the name and artwork | Shipping upstream's defaults |
 
 ## Pending decisions (to be resolved during the named phase)
 
 | ID | Question | Phase |
 |---|---|---|
 | P01 | **Research done (below); the dependency choice needs the owner's approval** | 3 |
-| P03 | winget IDs for Apple Devices / AMDS; fallback when winget is missing (older Windows 10) | 4 |
-| P04 | Flatpak USB strategy (host usbmuxd via portal vs `--device=all` + bundled daemon) | 4 |
+| P03 | winget IDs for Apple Devices / AMDS; fallback when winget is missing (older Windows 10). **Proposed:** `winget install --id 9NP83LWLPZ9K --source msstore` (ID must be confirmed on a Windows machine), falling back to opening Apple's iTunes download page | 4 |
+| P04 | Flatpak USB strategy. **Proposed:** require the host's usbmuxd (most distributions ship it) and show how to install it; a sandbox shouldn't install system services. Alternative: bundle a daemon with `--device=all` | 4 |
 | P05 | LiveContainer license and integration (built-in store mode) | 5 |
 | P06 | Code signing: Apple notarization / Windows Authenticode certificates (cost vs warnings) | 6 |
 | P08 | Account pre-hijacking: when a magic link first proves an address, remove the older sign-in methods and sessions (and their devices and sources?), or ask the user to confirm them? Needs a data model change and supersedes part of D25 | 6, before real users |

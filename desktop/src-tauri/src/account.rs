@@ -44,7 +44,7 @@ pub async fn login_new(
     *sideloader_guard = Some(account);
 
     if save_credentials {
-        let pass_entry = Entry::new("iloader", &email).map_err(|e| {
+        let pass_entry = Entry::new("orbit-setup", &email).map_err(|e| {
             AppError::KeyringWithMessage(
                 "Failed to create entry for credentials".into(),
                 e.to_string(),
@@ -79,7 +79,7 @@ pub async fn login_stored(
     anisette_server: String,
     sideloader_state: State<'_, SideloaderMutex>,
 ) -> Result<(), AppError> {
-    let pass_entry = Entry::new("iloader", &email).map_err(|e| {
+    let pass_entry = Entry::new("orbit-setup", &email).map_err(|e| {
         AppError::KeyringWithMessage(
             "Failed to create keyring entry for credentials".to_string(),
             e.to_string(),
@@ -108,7 +108,7 @@ pub fn delete_account(handle: AppHandle, email: String) -> Result<(), AppError> 
         .unwrap_or_else(std::vec::Vec::new);
     existing_ids.retain(|v| v.as_str().is_none_or(|s| s != email));
     store.set("ids", Value::Array(existing_ids));
-    let pass_entry = Entry::new("iloader", &email).map_err(|e| {
+    let pass_entry = Entry::new("orbit-setup", &email).map_err(|e| {
         AppError::KeyringWithMessage(
             "Failed to create keyring entry for credentials".into(),
             e.to_string(),
@@ -136,7 +136,7 @@ pub fn invalidate_account(sideloader_state: State<'_, SideloaderMutex>) {
 
 #[tauri::command]
 pub fn reset_anisette_state() -> Result<bool, AppError> {
-    let state_entry = Entry::new("iloader", "anisette_state").map_err(|e| {
+    let state_entry = Entry::new("orbit-setup", "anisette_state").map_err(|e| {
         AppError::KeyringWithMessage(
             "Failed to create keyring entry for anisette".into(),
             e.to_string(),
@@ -192,11 +192,12 @@ async fn login(
         }
     };
 
-    let anisette_url = if !anisette_server.starts_with("http") {
-        format!("https://{}", anisette_server)
-    } else {
-        anisette_server
-    };
+    // ORBIT: Apple sign-in uses only your Orbit server's anisette gateway. The
+    // frontend's anisette choice is ignored.
+    let _ = anisette_server;
+    let anisette_url = crate::orbit::anisette_url(app)
+        .await
+        .map_err(AppError::Anisette)?;
 
     let mut account = AppleAccount::builder(&email.to_lowercase())
         .anisette_provider(
@@ -253,7 +254,7 @@ async fn login(
     // TODO: Team Selection
 
     let sideloader = SideloaderBuilder::new(dev_session, email.to_lowercase())
-        .machine_name("iloader".into())
+        .machine_name("Orbit Setup".into())
         .storage(create_sideloading_storage(app)?)
         .extensions_behavior(ExtensionsBehaviorSelection::Fixed(
             ExtensionsBehavior::ReuseMain,

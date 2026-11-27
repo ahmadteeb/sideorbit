@@ -11,6 +11,7 @@ mod secure_storage;
 mod error;
 mod logging;
 mod operation;
+mod orbit; // ORBIT
 
 use crate::{
     account::{
@@ -34,7 +35,7 @@ use tracing_subscriber::{Layer, Registry, fmt, layer::SubscriberExt, util::Subsc
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_process::init())
-        .plugin(tauri_plugin_updater::Builder::new().build())
+        // ORBIT: no updater. Upstream's would replace Orbit Setup with iloader.
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_store::Builder::new().build())
@@ -49,7 +50,7 @@ pub fn run() {
 
             let file_appender = tracing_appender::rolling::RollingFileAppender::builder()
                 .rotation(tracing_appender::rolling::Rotation::DAILY)
-                .filename_prefix("iloader")
+                .filename_prefix("orbit-setup")
                 .filename_suffix("log")
                 .max_log_files(2)
                 .build(&log_dir)
@@ -101,6 +102,7 @@ pub fn run() {
             app.manage(DeviceInfoMutex::new(None));
             app.manage(SideloaderMutex::new(None));
             app.manage(PairingCancelToken::new(None));
+            app.manage(orbit::Orbit::new()); // ORBIT
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -126,6 +128,13 @@ pub fn run() {
             force_disable_keyring,
             cancel_pairing,
             has_stored_rppairing,
+            // ORBIT
+            orbit::orbit_status,
+            orbit::orbit_methods,
+            orbit::orbit_sign_in,
+            orbit::orbit_sign_in_email,
+            orbit::orbit_cancel_sign_in,
+            orbit::orbit_sign_out,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

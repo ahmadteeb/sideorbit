@@ -34,7 +34,7 @@ export const ErrorProvider: React.FC<{ children: React.ReactNode }> = ({
   const [suggestions, setSuggestions] = useState<string[]>([]);
   const [anisetteServer] = useStore<string>(
     "anisetteServer3-1",
-    "mac-ani.jkcoxson.com",
+    "orbit",
   );
   const { platform } = usePlatform();
 
@@ -167,7 +167,7 @@ export const ErrorProvider: React.FC<{ children: React.ReactNode }> = ({
                     github: (
                       <span
                         onClick={() =>
-                          openUrl("https://github.com/nab138/iloader/issues")
+                          openUrl("https://github.com/ahmadteeb/sideorbit/issues")
                         }
                         role="link"
                         className="error-link"
