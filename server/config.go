@@ -18,6 +18,7 @@ import (
 
 type config struct {
 	httpAddr    string
+	metricsAddr string // empty: no metrics listener
 	databaseURL string
 	anisetteURL *url.URL
 	logLevel    slog.Level
@@ -67,10 +68,13 @@ func loadConfig(getenv func(string) string) (config, error) {
 	cfg := config{
 		httpAddr:    cmp.Or(getenv("HTTP_ADDR"), ":8080"),
 		databaseURL: getenv("DATABASE_URL"),
+		metricsAddr: getenv("METRICS_ADDR"),
 		anisetteURL: httpURL("ANISETTE_UPSTREAM"),
 	}
 	if cfg.databaseURL == "" {
 		fail("DATABASE_URL is required")
+	} else if strings.Contains(cfg.databaseURL, "change-me") {
+		fail("DATABASE_URL still has the example secret from .env.example: change it")
 	}
 	if err := cfg.logLevel.UnmarshalText([]byte(cmp.Or(getenv("LOG_LEVEL"), "info"))); err != nil {
 		fail("LOG_LEVEL: %w", err)

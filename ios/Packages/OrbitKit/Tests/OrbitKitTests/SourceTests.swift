@@ -27,6 +27,7 @@ final class SourceTests: XCTestCase {
         XCTAssertEqual(player.size, 1_048_576)
         XCTAssertEqual(player.downloadURL.absoluteString, "https://dl.example.com/p2.ipa")
         XCTAssertEqual(player.unavailableOnFreeAccounts, ["Push notifications", "iCloud"])
+        XCTAssertEqual(player.otherEntitlements, ["get-task-allow"])
         XCTAssertEqual(player.privacyKeys, ["NSCameraUsageDescription"])
         XCTAssertEqual(source.apps[1].privacyKeys, ["Microphone"])
     }

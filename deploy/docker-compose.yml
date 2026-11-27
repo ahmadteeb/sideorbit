@@ -71,10 +71,12 @@ services:
 
   anisette-v3:
     # Upstream image, unmodified and pinned. INTERNAL ONLY: no published ports;
-    # reached through the orbit-server gateway. It shares a network with nothing else.
+    # reached through the orbit-server gateway. It shares a network with
+    # orbit-server only, so it can't reach Postgres.
     image: dadoum/anisette-v3-server@sha256:d551c75454bcbee68dc262d4247d5f87fa309dfc8f2125644d333c648596e3c7
     restart: unless-stopped
     security_opt: ["no-new-privileges:true"]
+    cap_drop: [ALL]
     volumes:
       - anisette_data:/home/Alcoholic/.config/anisette-v3/lib/
     logging: *logging

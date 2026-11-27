@@ -280,7 +280,7 @@ struct AppDetailView: View {
             .listRowBackground(OrbitColor.surface)
 
             Section {
-                    if app.unavailableOnFreeAccounts.isEmpty && app.privacyKeys.isEmpty {
+                    if app.entitlements.isEmpty && app.privacyKeys.isEmpty {
                         Text("This source doesn't list any permissions.")
                             .foregroundStyle(OrbitColor.textMuted)
                     }
@@ -290,6 +290,11 @@ struct AppDetailView: View {
                     }
                     ForEach(app.privacyKeys, id: \.self) { key in
                         Label(Self.readable(key), systemImage: "hand.raised")
+                    }
+                    ForEach(app.otherEntitlements, id: \.self) { entitlement in
+                        Text(entitlement)
+                            .font(.footnote.monospaced())
+                            .foregroundStyle(OrbitColor.textMuted)
                     }
             } header: {
                 Text("Permissions it asks for").foregroundStyle(OrbitColor.textMuted)

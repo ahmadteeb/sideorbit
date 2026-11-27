@@ -158,3 +158,21 @@ func (q *Queries) SummarizeEvents(ctx context.Context, arg SummarizeEventsParams
 	}
 	return items, nil
 }
+
+const trimDeviceEvents = `-- name: TrimDeviceEvents :exec
+DELETE FROM refresh_events WHERE id IN (
+  SELECT e.id FROM refresh_events e WHERE e.device_id = $1
+  ORDER BY e.occurred_at DESC, e.id DESC OFFSET $2::int
+)
+`
+
+type TrimDeviceEventsParams struct {
+	DeviceID uuid.UUID
+	Keep     int32
+}
+
+// Keep each device's newest events, whatever dates a client invents.
+func (q *Queries) TrimDeviceEvents(ctx context.Context, arg TrimDeviceEventsParams) error {
+	_, err := q.db.Exec(ctx, trimDeviceEvents, arg.DeviceID, arg.Keep)
+	return err
+}

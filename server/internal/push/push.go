@@ -14,6 +14,7 @@ import (
 	"net/url"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	webpush "github.com/SherClockHolmes/webpush-go"
@@ -23,6 +24,7 @@ import (
 
 	"github.com/ahmadteeb/sideorbit/server/internal/auth"
 	"github.com/ahmadteeb/sideorbit/server/internal/httpx"
+	"github.com/ahmadteeb/sideorbit/server/internal/metrics"
 	"github.com/ahmadteeb/sideorbit/server/internal/ratelimit"
 	"github.com/ahmadteeb/sideorbit/server/internal/store/db"
 )
@@ -31,6 +33,9 @@ const (
 	maxSubscriptions = 10
 	// A subscription that keeps failing is dead.
 	maxFailures = 10
+	// sendTimeout bounds one notification to all of an account's browsers, so a
+	// slow endpoint can't hold up other people's alerts.
+	sendTimeout = 20 * time.Second
 )
 
 // Keys is the server's VAPID identity.
@@ -118,13 +123,16 @@ func (s *Service) subscribe(w http.ResponseWriter, r *http.Request) {
 		agent = strings.ToValidUTF8(agent[:200], "")
 	}
 	userID := auth.UserID(r.Context())
-	var session *uuid.UUID
-	if id := s.sessionOf(r); id != uuid.Nil {
-		session = &id
+	// Alerts end with the session that turned them on, so there has to be a live
+	// one: a revoked browser's access token must not be able to subscribe again.
+	session := s.sessionOf(r)
+	if session == uuid.Nil {
+		httpx.Error(w, http.StatusForbidden, "session_required", "Alerts can only be turned on from a signed-in browser.", "Sign out, sign in again, then turn on alerts.")
+		return
 	}
 	sub, err := s.q.SavePushSubscription(r.Context(), db.SavePushSubscriptionParams{
 		ID: uuid.Must(uuid.NewV7()), UserID: userID, Endpoint: req.Endpoint,
-		P256dh: req.Keys.P256dh, Auth: req.Keys.Auth, UserAgent: &agent, SessionID: session,
+		P256dh: req.Keys.P256dh, Auth: req.Keys.Auth, UserAgent: &agent, SessionID: &session,
 	})
 	if err == nil {
 		err = s.q.TrimPushSubscriptions(r.Context(), db.TrimPushSubscriptionsParams{UserID: userID, Keep: maxSubscriptions})
@@ -156,6 +164,7 @@ func (s *Service) unsubscribe(w http.ResponseWriter, r *http.Request) {
 func (s *Service) test(w http.ResponseWriter, r *http.Request) {
 	userID := auth.UserID(r.Context())
 	if !s.tests.Allow(userID.String()) {
+		s.log.Warn("rate limit hit", "endpoint", "push_test", "user_id", userID)
 		w.Header().Set("Retry-After", "60")
 		httpx.Error(w, http.StatusTooManyRequests, "rate_limited", "Too many test alerts.", "Wait a minute.")
 		return
@@ -183,17 +192,37 @@ func (s *Service) Send(ctx context.Context, userID uuid.UUID, msg Message) (sent
 	if err != nil {
 		return 0, 0, err
 	}
-	for _, sub := range subs {
-		status, sendErr := s.deliver(ctx, sub, payload)
+	// Deliveries run together under one deadline; bookkeeping uses the caller's
+	// context so it still happens when that deadline passes.
+	type result struct {
+		status int
+		err    error
+	}
+	results := make([]result, len(subs))
+	sendCtx, cancel := context.WithTimeout(ctx, sendTimeout)
+	defer cancel()
+	var wg sync.WaitGroup
+	for i, sub := range subs {
+		wg.Go(func() {
+			status, err := s.deliver(sendCtx, sub, payload)
+			results[i] = result{status, err}
+		})
+	}
+	wg.Wait()
+	for i, sub := range subs {
+		status, sendErr := results[i].status, results[i].err
 		switch {
 		case sendErr == nil && status >= 200 && status < 300:
 			sent++
+			metrics.Push.WithLabelValues("sent").Inc()
 			err = s.q.ResetPushFailures(ctx, sub.ID)
 		case status == http.StatusNotFound || status == http.StatusGone:
 			failed++
+			metrics.Push.WithLabelValues("gone").Inc()
 			err = s.q.DeletePushSubscriptionByID(ctx, sub.ID)
 		default:
 			failed++
+			metrics.Push.WithLabelValues("failed").Inc()
 			// The endpoint is a secret URL and transport errors quote it.
 			var urlErr *url.Error
 			if errors.As(sendErr, &urlErr) {

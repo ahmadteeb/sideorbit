@@ -54,6 +54,9 @@ type reportEvent struct {
 
 const (
 	maxApps = 100
+	// A device refreshing a few times a day stays well under this for the whole
+	// retention period.
+	maxEventsPerDevice = 1000
 	// Reports queued offline may be old, but not older than events are kept.
 	maxReportAge  = 90 * 24 * time.Hour
 	maxClockAhead = 10 * time.Minute
@@ -63,7 +66,7 @@ var (
 	teamIDPattern    = regexp.MustCompile(`^[A-Z0-9]{10}$`)
 	domainPattern    = regexp.MustCompile(`^[A-Za-z0-9-]+(\.[A-Za-z0-9-]+)+$`)
 	bundleIDPattern  = regexp.MustCompile(`^[A-Za-z0-9._-]{1,155}$`)
-	errorCodePattern = regexp.MustCompile(`^[A-Z0-9_]{1,64}$`)
+	errorCodePattern = regexp.MustCompile(`^[A-Z][A-Z0-9_]{0,63}$`) // never a bare number
 )
 
 // masked requires an Apple ID label with most of the identifier hidden, so an
@@ -105,8 +108,8 @@ func (b *reportBody) validate(now time.Time) error {
 			}
 			if a.SourceURL != "" {
 				u, err := url.Parse(a.SourceURL)
-				if err != nil || u.Scheme != "https" || u.Host == "" || u.User != nil || !text(a.SourceURL, 2048) {
-					return fmt.Errorf("apps[%d]: source_url must be an https URL", i)
+				if err != nil || u.Scheme != "https" || u.Host == "" || u.User != nil || u.RawQuery != "" || u.Fragment != "" || !text(a.SourceURL, 2048) {
+					return fmt.Errorf("apps[%d]: source_url must be an https URL without credentials or a query", i)
 				}
 			}
 		}
@@ -175,6 +178,9 @@ func (s *Service) report(w http.ResponseWriter, r *http.Request) {
 				ID: uuid.Must(uuid.NewV7()), DeviceID: id, Kind: e.Kind, Trigger: e.Trigger, Result: e.Result,
 				ErrorCode: e.ErrorCode, DurationMs: e.DurationMs, OccurredAt: at,
 			}); err != nil {
+				return err
+			}
+			if err := q.TrimDeviceEvents(ctx, db.TrimDeviceEventsParams{DeviceID: id, Keep: maxEventsPerDevice}); err != nil {
 				return err
 			}
 		}

@@ -17,23 +17,30 @@ public struct AltSource: Equatable, Sendable {
         /// Usage descriptions the app declares, such as camera access.
         public let privacyKeys: [String]
 
+        /// Entitlements not named in `unavailableOnFreeAccounts`, shown as declared.
+        public var otherEntitlements: [String] {
+            entitlements.filter { Self.unavailableName($0) == nil }
+        }
+
         /// Features this app asks for that a free Apple ID can't grant.
         public var unavailableOnFreeAccounts: [String] {
             var names: [String] = []
-            for entitlement in entitlements {
-                let name: String?
-                switch entitlement {
-                case "aps-environment": name = "Push notifications"
-                case "com.apple.developer.associated-domains": name = "Associated domains"
-                case "com.apple.developer.applesignin": name = "Sign in with Apple"
-                case "com.apple.developer.networking.networkextension": name = "Network extensions"
-                case let e where e.hasPrefix("com.apple.developer.icloud") || e.hasPrefix("com.apple.developer.ubiquity"):
-                    name = "iCloud"
-                default: name = nil
-                }
-                if let name, !names.contains(name) { names.append(name) }
+            for name in entitlements.compactMap(Self.unavailableName) where !names.contains(name) {
+                names.append(name)
             }
             return names
+        }
+
+        private static func unavailableName(_ entitlement: String) -> String? {
+            switch entitlement {
+            case "aps-environment": return "Push notifications"
+            case "com.apple.developer.associated-domains": return "Associated domains"
+            case "com.apple.developer.applesignin": return "Sign in with Apple"
+            case "com.apple.developer.networking.networkextension": return "Network extensions"
+            case let e where e.hasPrefix("com.apple.developer.icloud") || e.hasPrefix("com.apple.developer.ubiquity"):
+                return "iCloud"
+            default: return nil
+            }
         }
     }
 

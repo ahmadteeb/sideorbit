@@ -119,17 +119,6 @@ func (q *Queries) DeleteUserRefreshTokens(ctx context.Context, userID uuid.UUID)
 	return err
 }
 
-const getRefreshTokenFamily = `-- name: GetRefreshTokenFamily :one
-SELECT family_id FROM refresh_tokens WHERE token_hash = $1
-`
-
-func (q *Queries) GetRefreshTokenFamily(ctx context.Context, tokenHash []byte) (uuid.UUID, error) {
-	row := q.db.QueryRow(ctx, getRefreshTokenFamily, tokenHash)
-	var family_id uuid.UUID
-	err := row.Scan(&family_id)
-	return family_id, err
-}
-
 const getRefreshTokenOwner = `-- name: GetRefreshTokenOwner :one
 SELECT user_id FROM refresh_tokens WHERE token_hash = $1
 `
@@ -183,6 +172,24 @@ func (q *Queries) ListSessions(ctx context.Context, userID uuid.UUID) ([]ListSes
 		return nil, err
 	}
 	return items, nil
+}
+
+const liveSession = `-- name: LiveSession :one
+SELECT family_id FROM refresh_tokens
+WHERE token_hash = $1 AND user_id = $2 AND revoked_at IS NULL AND expires_at > now()
+`
+
+type LiveSessionParams struct {
+	TokenHash []byte
+	UserID    uuid.UUID
+}
+
+// The session behind a refresh token, if it is this account's and still usable.
+func (q *Queries) LiveSession(ctx context.Context, arg LiveSessionParams) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, liveSession, arg.TokenHash, arg.UserID)
+	var family_id uuid.UUID
+	err := row.Scan(&family_id)
+	return family_id, err
 }
 
 const lockRefreshToken = `-- name: LockRefreshToken :one

@@ -171,6 +171,9 @@ func (e env) do(t *testing.T, method, path, body string, header map[string]strin
 		t.Fatal(err)
 	}
 	defer res.Body.Close()
+	if res.StatusCode == http.StatusSwitchingProtocols {
+		return res, ""
+	}
 	b, err := io.ReadAll(res.Body)
 	if err != nil {
 		t.Fatal(err)
@@ -393,7 +396,26 @@ func TestLimits(t *testing.T) {
 		}
 		return res.StatusCode
 	}
-	// A provisioning request without an upgrade gets 426, after the quotas.
+	t.Run("requests that can't reach anisette spend no quota", func(t *testing.T) {
+		e := newEnv(t, func(c *Config) { c.ProvisionPerHourTotal = 1 })
+		for range 5 {
+			if got := status(t, e, "provisioning_session", bearer("token-a")); got != 426 {
+				t.Fatalf("plain GET: %d", got)
+			}
+		}
+		conn, _, err := e.dial(t, http.Header{"Authorization": {"Bearer token-b"}})
+		if err != nil {
+			t.Fatalf("a real session was refused: %v", err)
+		}
+		_ = conn.CloseNow()
+	})
+	upgrade := func(token string) map[string]string {
+		h := bearer(token)
+		h["Connection"], h["Upgrade"], h["Sec-WebSocket-Version"], h["Sec-WebSocket-Key"] = "Upgrade", "websocket", "13", "dGhlIHNhbXBsZSBub25jZQ=="
+		return h
+	}
+	withDeviceUpgrade := upgrade("token-a")
+	withDeviceUpgrade["X-Orbit-Device"] = deviceA.String()
 	tests := []struct {
 		name   string
 		change func(*Config)
@@ -402,9 +424,9 @@ func TestLimits(t *testing.T) {
 		want   []int
 	}{
 		{"headers per user", func(c *Config) { c.HeadersPerMinUser = 2 }, "get_headers", bearer("token-a"), []int{200, 200, 429}},
-		{"provisioning per user", func(c *Config) { c.ProvisionPerHourUser = 2 }, "provisioning_session", bearer("token-a"), []int{426, 426, 429}},
-		{"provisioning per device", func(c *Config) { c.ProvisionPerHourDevice = 1 }, "provisioning_session", withDevice("token-a"), []int{426, 429}},
-		{"provisioning per address", func(c *Config) { c.ProvisionPerHourIP = 1 }, "provisioning_session", bearer("token-a"), []int{426, 429}},
+		{"provisioning per user", func(c *Config) { c.ProvisionPerHourUser = 2 }, "provisioning_session", upgrade("token-a"), []int{101, 101, 429}},
+		{"provisioning per device", func(c *Config) { c.ProvisionPerHourDevice = 1 }, "provisioning_session", withDeviceUpgrade, []int{101, 429}},
+		{"provisioning per address", func(c *Config) { c.ProvisionPerHourIP = 1 }, "provisioning_session", upgrade("token-a"), []int{101, 429}},
 		{"per address", func(c *Config) { c.RequestsPerMinIP = 2 }, "client_info", nil, []int{401, 401, 429}},
 		{"someone else's device", nil, "get_headers", withDevice("token-b"), []int{403}},
 		{"malformed device", nil, "get_headers", map[string]string{"Authorization": "Bearer token-a", "X-Orbit-Device": "x"}, []int{403}},
@@ -421,8 +443,8 @@ func TestLimits(t *testing.T) {
 	}
 	t.Run("overall provisioning cap spans accounts", func(t *testing.T) {
 		e := newEnv(t, func(c *Config) { c.ProvisionPerHourTotal = 1 })
-		a, b := status(t, e, "provisioning_session", bearer("token-a")), status(t, e, "provisioning_session", bearer("token-b"))
-		if a != 426 || b != 429 {
+		a, b := status(t, e, "provisioning_session", upgrade("token-a")), status(t, e, "provisioning_session", upgrade("token-b"))
+		if a != 101 || b != 429 {
 			t.Errorf("got %d %d", a, b)
 		}
 	})

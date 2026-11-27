@@ -12,20 +12,38 @@
 | Threat | Control |
 |---|---|
 | Server breach exposes Apple accounts | **The server never receives them** (hard rule 1). The report endpoint rejects unknown fields. A CI grep test fails the build if the server code references `password`, `p12` or `pairing` outside allowlisted files |
-| Pairing file theft on device | Stored in the app container with `FileProtectionType.complete`. Never uploaded. Exports require an explicit user action |
+| Pairing file theft on device | *Not built yet.* Stored in the app container, never uploaded, exports need an explicit action. The file protection class is open (P11): `complete` would make it unreadable during a locked-screen refresh |
 | Apple credentials at rest on device | Keychain with `kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly` (so background refresh still works). Never in UserDefaults or logs |
-| Anisette abuse | Gateway auth required, per-user/device/IP rate limits, provisioning caps, account device cap (P07), anomaly logging. The container is not exposed publicly |
+| Anisette abuse | Gateway auth required, per-user/device/IP/total rate limits, provisioning caps, account device cap (D24), rate-limit hits logged and counted in `/metrics`. The container is not exposed publicly |
 | Account takeover via OAuth | PKCE + `state` + exact redirect allowlist. The iOS code exchange is bound to a `code_challenge`. Codes are single-use with a 60s TTL. Native sign-ins need a button press first (D32). **Residual risk:** `orbit://` can be claimed by another app; PKCE and the button limit but don't remove it |
 | Magic link attacks | 15-min single-use hashed tokens, rate limits per email + IP, no enumeration (always 202) |
-| Refresh token theft | Rotation with reuse detection (revoke family), 30-day absolute expiry, device-bound `client` field |
+| Refresh token theft | Rotation with reuse detection (revoke family), 30-day absolute expiry. A web token works only from the cookie and a native token only from the request body (not bound to a device) |
 | SSRF via source URLs | https only, resolve and block private/loopback/link-local ranges, 5s timeout, 2 MB cap, no redirects to blocked ranges |
 | Malicious IPAs from sources | Orbit shows the source URL, bundle ID and requested entitlements before install. Warn on unknown sources. We don't host IPAs |
-| XSS / CSRF on the dashboard | Strict CSP (no inline scripts), SameSite=Lax cookies + CSRF token for cookie-auth mutations, output escaping (Svelte default) |
+| XSS / CSRF on the dashboard | Strict CSP (no inline scripts), `__Host-` SameSite=Lax cookies + a required CSRF header on cookie-auth mutations, output escaping (Svelte default) |
 | Desktop helper privilege | The polkit/UAC prompt only performs a fixed, auditable action (udev rule install / winget Apple Devices). No arbitrary command execution |
-| Supply chain | Pin dependencies; Dependabot; actions pinned by SHA; release checksums; reproducible Docker builds |
+| Supply chain | Lockfiles; monthly Dependabot with a 14-day cooldown; actions pinned by SHA; anisette image pinned by digest; releases only from commits on `main`, with checksums. *Not yet:* other base images pinned by digest, reproducible builds |
+
+## Known open risks
+
+Found in the 2026-11-27 audit and waiting for a decision (see DECISIONS.md → Pending):
+
+- **P08, high:** someone holding a stale "verified" address at a provider can create the account first; the real owner's magic link then joins it, and the earlier identity keeps access. **Decide before real users sign up.**
+- **P09:** web push endpoints may be any public HTTPS host.
+- **P10:** the shared caps on sign-in email and on provisioning can be used up by someone with several addresses and accounts, blocking others for an hour.
+- **P12:** saved source URLs are stored whole, including any secret query token, and backups are unencrypted and keep deleted data for 14 days.
+
+## Audit record
+
+| Date | Scope | Result |
+|---|---|---|
+| 2026-11-26/27 | Per-PR reviews of auth, the gateway and iOS sign-in | Fixed before merge |
+| 2026-11-27 | Whole repository | No path for Apple credentials to reach the server. 2 high, 4 medium, 6 low. Fixed: slow push endpoints stalling alerts, quota drained by plain GETs, push subscriptions from dead sessions, unbounded report history, tokens and addresses in proxy logs, permission screen wording, deletion race, anisette capabilities, stricter report fields, restore and example-secret handling. Open: P08-P10, P12 |
+
+A compromised anisette image could still reach the API on their shared network and forge the client address that rate limits use. The image is pinned by digest.
 
 ## Logging rules
-- Never log: request bodies on `/anisette/*`, `Authorization` headers, tokens, emails in full (mask them), IPs beyond 30 days.
+- Never log: request bodies on `/anisette/*`, `Authorization` headers, tokens, emails in full (mask them), client IP addresses (neither the server nor the proxy's error log records them).
 - Always log: auth events (success/failure), rate-limit hits, admin actions.
 
 ## Reporting

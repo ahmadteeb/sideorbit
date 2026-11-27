@@ -82,6 +82,45 @@ Signing in from a plain browser (`client=web`) lands on `/`, which has no page u
   ```bash
   docker compose stop orbit-server
   docker compose exec -T postgres pg_restore -U orbit -d orbit --clean --if-exists < backups/orbit-<timestamp>.dump
-  docker compose start orbit-server
+  # An old backup brings back sessions that were since signed out: end them all.
+  docker compose exec -T postgres psql -U orbit -d orbit -c "UPDATE refresh_tokens SET revoked_at = now() WHERE revoked_at IS NULL; DELETE FROM push_subscriptions;"
+  # Change JWT_SECRET in .env as well, then:
+  docker compose up -d orbit-server
   ```
 - **Updates:** `git pull && docker compose up -d --build`. Migrations run automatically on start.
+
+Accounts and devices deleted after a backup was taken come back with it; delete them again.
+
+## Monitoring
+- **Uptime:** run `deploy/uptime-check.sh https://orbit.example.com` from **another** machine every few minutes. It exits non-zero when the server, database or anisette is down.
+- **Metrics:** set `METRICS_ADDR=:9090` in `.env`. The port is not published; scrape `orbit-server:9090/metrics` from a Prometheus container on the stack's network. It listens on every container network the server is on, anisette's included; it holds counts only.
+  Useful alerts:
+  - `time() - orbit_scheduler_last_success_timestamp_seconds > 3600`: expiry warnings have stopped.
+  - `rate(orbit_http_requests_total{status=~"5.."}[5m]) > 0`
+  - `rate(orbit_http_requests_total{status="429"}[5m])`: someone is hitting limits.
+  - `rate(orbit_push_notifications_total{result="failed"}[1h])`
+- **Logs:** `docker compose logs -f orbit-server` (JSON). No tokens, request bodies or client addresses.
+
+## Load testing
+Only against your own server, with a token from "Verify your install" and the limits raised for the test (all from one address otherwise hits the per-IP limit):
+```bash
+docker run --rm -i --network host -v "$PWD/loadtest:/lt:ro" grafana/k6 run -e BASE=https://orbit.example.com -e TOKEN="$TOKEN" -e RATE=100 /lt/gateway.js
+```
+The script never makes anisette contact Apple. Don't change it to.
+
+## Troubleshooting
+| Symptom | Cause and fix |
+|---|---|
+| `orbit-server` restarts, log says `config: …` | The message names the setting in `.env` that is wrong or missing |
+| `/readyz` shows `"anisette":"error"` | First start downloads Apple libraries; wait a minute, then `docker compose logs anisette-v3`. The server needs outbound internet |
+| `/readyz` shows `"db":"error"` | `docker compose logs postgres`. A changed `POSTGRES_PASSWORD` doesn't change an existing database's password |
+| Browser certificate warning | DNS doesn't point here yet, or ports 80/443 are blocked: `docker compose logs caddy` |
+| Sign-in email never arrives | `could not send sign-in email` in the log. Check `SMTP_*`; the server must offer STARTTLS (587) or TLS (465) |
+| GitHub or Google says the redirect doesn't match | The callback URL must be exactly `PUBLIC_URL/api/auth/<provider>/callback` |
+| Sign-in ends with `account_exists` | That email already has an account made another way (D25). Use the original method or an email link |
+| "Alerts aren't set up on this server" | Set `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY` and `VAPID_SUBJECT` |
+
+## Releasing (maintainers)
+1. In GitHub → Settings → Environments, create `release` and add yourself as a required reviewer.
+2. Dry run: Actions → release → Run workflow. Everything builds; nothing is published.
+3. Publish: tag a commit on `main` as `vX.Y.Z` and push the tag. It publishes the multi-arch server image to ghcr and a GitHub Release with `Orbit.ipa` and checksums.

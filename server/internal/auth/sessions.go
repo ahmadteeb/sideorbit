@@ -20,15 +20,15 @@ func (s *Service) methods(w http.ResponseWriter, _ *http.Request) {
 	})
 }
 
-// SessionID returns the web session the request's cookie belongs to, or the zero
-// UUID.
+// SessionID returns the signed-in account's live web session named by the
+// request's cookie, or the zero UUID.
 func (s *Service) SessionID(r *http.Request) uuid.UUID {
 	c, err := r.Cookie(s.cookieName(cookieRefresh))
 	if err != nil {
 		return uuid.Nil
 	}
 	// A stale cookie just means no known session.
-	id, _ := s.q.GetRefreshTokenFamily(r.Context(), hashToken(c.Value))
+	id, _ := s.q.LiveSession(r.Context(), db.LiveSessionParams{TokenHash: hashToken(c.Value), UserID: UserID(r.Context())})
 	return id
 }
 

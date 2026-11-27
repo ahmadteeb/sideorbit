@@ -1,0 +1,30 @@
+# Monthly, grouped, so updates arrive as a few reviewable pull requests.
+version: 2
+updates:
+  - package-ecosystem: gomod
+    directory: /server
+    schedule: { interval: monthly }
+    cooldown: { default-days: 14 }
+    groups: { go: { patterns: ["*"] } }
+  - package-ecosystem: npm
+    directory: /web
+    schedule: { interval: monthly }
+    cooldown: { default-days: 14 }
+    groups: { web: { patterns: ["*"] } }
+    ignore:
+      # AGENTS.md fixes SvelteKit 2; moving to 3 is a deliberate change.
+      - dependency-name: "@sveltejs/*"
+        update-types: ["version-update:semver-major"]
+  - package-ecosystem: github-actions
+    directory: /
+    schedule: { interval: monthly }
+    cooldown: { default-days: 14 }
+    groups: { actions: { patterns: ["*"] } }
+  - package-ecosystem: docker-compose
+    directory: /deploy
+    schedule: { interval: monthly }
+    cooldown: { default-days: 14 }
+  - package-ecosystem: docker
+    directory: /server
+    schedule: { interval: monthly }
+    cooldown: { default-days: 14 }

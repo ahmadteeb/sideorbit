@@ -15,6 +15,7 @@ import (
 	"github.com/go-chi/chi/v5/middleware"
 
 	"github.com/ahmadteeb/sideorbit/server/internal/httpx"
+	"github.com/ahmadteeb/sideorbit/server/internal/metrics"
 )
 
 // check reports whether a dependency is reachable.
@@ -58,11 +59,13 @@ func requestLogger(log *slog.Logger) func(http.Handler) http.Handler {
 			start := time.Now()
 			ww := middleware.NewWrapResponseWriter(w, r.ProtoMajor)
 			next.ServeHTTP(ww, r)
+			route, took := chi.RouteContext(r.Context()).RoutePattern(), time.Since(start)
+			metrics.Request(r.Method, route, ww.Status(), took)
 			log.Info("request",
 				"method", r.Method,
-				"route", chi.RouteContext(r.Context()).RoutePattern(),
+				"route", route,
 				"status", ww.Status(),
-				"duration_ms", time.Since(start).Milliseconds())
+				"duration_ms", took.Milliseconds())
 		})
 	}
 }

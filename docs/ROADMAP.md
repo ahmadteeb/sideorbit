@@ -71,12 +71,12 @@ Each phase is one PR (or a few sub-PRs) with a slash command in `.claude/command
 
 **Done when:** a free account runs Orbit + 3 user apps on one device using LiveContainer, and the daily automation refreshes them with the VPN handled.
 
-## Phase 6: Hardening & release ☐  → `/phase-6`
-- [ ] `security-reviewer` subagent full audit; fix findings; update SECURITY.md
-- [ ] Load test the anisette gateway (k6); tune rate limits
-- [ ] Observability: structured logs, `/metrics` (Prometheus), uptime check
-- [ ] Docs: USER_GUIDE with screenshots, SELF_HOSTING, troubleshooting
-- [ ] `release.yml`: tag → build all artifacts → GitHub Release with checksums; resolve **P06**
+## Phase 6: Hardening & release ◐  → `/phase-6`
+- [ ] `security-reviewer` subagent full audit; fix findings; update SECURITY.md. *Done for what exists; P08-P10 and P12 await decisions, and the audit repeats when iOS signing and the desktop app exist*
+- [x] Load test the anisette gateway (k6); tune rate limits (results in API.md; limits unchanged)
+- [x] Observability: structured logs, `/metrics` (Prometheus), uptime check
+- [ ] Docs: USER_GUIDE with screenshots, SELF_HOSTING, troubleshooting. *Written; screenshots are placeholders*
+- [ ] `release.yml`: tag → build all artifacts → GitHub Release with checksums; resolve **P06**. *Server image and IPA only; desktop packages and the LiveContainer variant don't exist yet; P06 pending*
 - [ ] v1.0.0
 
 **Done when:** a tagged release publishes every artifact, and the docs let a stranger self-host and onboard.

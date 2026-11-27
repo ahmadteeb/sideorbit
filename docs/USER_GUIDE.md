@@ -1,4 +1,13 @@
-# Orbit: user guide (draft; Phase 6 adds screenshots)
+# Orbit: user guide (draft)
+
+> **Orbit is not finished.** Today you can run the server, use the web dashboard and sign in with the iPhone app, which lists app sources, warns you before Orbit itself expires and shows your iPhone on the dashboard. **It can't install or refresh other apps yet, and there is no Orbit Setup desktop app.** Sections 2 and 3 below describe how it is meant to work.
+
+## What works today
+1. Open your server's address in a browser and sign in. *(screenshot: sign-in page)*
+2. Install `Orbit.ipa` on your iPhone with [iloader](https://github.com/nab138/iloader), trust the profile and turn on Developer Mode.
+3. Open Orbit, type your server's address and sign in. *(screenshot: iPhone sign-in)*
+4. Home shows how long Orbit has left. Tap **Warn me before it expires**. *(screenshot: Home)*
+5. For alerts in the dashboard on iPhone: Safari → Share → **Add to Home Screen**, open it from there, then Settings → **Enable alerts** → **Send test alert**. *(screenshot: alerts)*
 
 ## What you need
 - An iPhone or iPad on iOS 16 or later, a free Apple ID, and a Mac, Windows or Linux computer **once**, plus a USB cable.
@@ -27,6 +36,19 @@
 Orbit refreshes your apps before they expire. Keep LocalDevVPN connected. If something needs you, Orbit tells you exactly what to do.
 
 ## Troubleshooting
+
+### Dashboard and sign-in (today)
+
+| What you see | Fix |
+|---|---|
+| "You already have an Orbit account with this email" | Sign in the way you did the first time, or use an email link |
+| A sign-in link "no longer works" | Links work once, for 15 minutes. Ask for a new one |
+| "This browser can't receive alerts" | On iPhone, alerts work only from the Home Screen app |
+| "Notifications are blocked" | Allow them for the site in your browser's settings, then reload |
+| "This account has reached its device limit" | Remove a device you no longer use in the dashboard |
+| A removed iPhone isn't listed again | Open Orbit on it → Home → **Add it again** |
+
+### Installing and refreshing (when built)
 
 | Message | Fix |
 |---|---|

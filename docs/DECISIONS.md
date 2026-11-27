@@ -36,6 +36,8 @@ Format: **ID · Decision** · *Why* · Alternatives rejected. Add new entries at
 | D30 | **A push subscription records the web session that created it and is deleted when that session ends** | A signed-out or revoked browser must not keep receiving an account's device alerts. Stores one more id per subscription | Client-side unsubscribe only (misses remote revocation) |
 | D31 | **P02: LocalDevVPN is driven by `localdevvpn://enable?scheme=orbit` (and `disable`), or its Shortcuts action** (`ControlLocalDevVPNIntent`, runs without opening the app) | Read from its source on 2026-11-27; `scheme` makes it switch back to Orbit. Needs a device check | Asking the user to toggle it by hand |
 | D32 | **iOS and desktop sign-ins end on a "Continue as …" page before any code is issued** | Another app can start its own flow and claim `orbit://`; this makes a silent sign-in impossible. A custom scheme can't be made exclusive, and Associated Domains needs a paid account (hard rule 4), so a user who presses the button for an app they didn't open is still exposed | Redirecting straight away |
+| D33 | **Each device keeps its newest 1000 history events** | Invented timestamps could otherwise fill the disk; real use stays far below this in 90 days | A per-day cap |
+| D34 | **Releases publish only from a tag on a commit in `main`, through the `release` environment; running the workflow by hand is a dry run** | A tag alone shouldn't publish unreviewed code | Publishing on any tag |
 
 ## Pending decisions (to be resolved during the named phase)
 
@@ -46,6 +48,11 @@ Format: **ID · Decision** · *Why* · Alternatives rejected. Add new entries at
 | P04 | Flatpak USB strategy (host usbmuxd via portal vs `--device=all` + bundled daemon) | 4 |
 | P05 | LiveContainer license and integration (built-in store mode) | 5 |
 | P06 | Code signing: Apple notarization / Windows Authenticode certificates (cost vs warnings) | 6 |
+| P08 | Account pre-hijacking: when a magic link first proves an address, remove the older sign-in methods and sessions (and their devices and sources?), or ask the user to confirm them? Needs a data model change and supersedes part of D25 | 6, before real users |
+| P09 | Accept web push endpoints only from known push services (Apple, Google, Mozilla, Microsoft)? Recommended; an unusual browser would lose alerts | 6 |
+| P10 | Protecting the shared email and provisioning caps: captcha or proof of work when they run low (D24 ruled a captcha out), or reserve a share for established accounts | 6 |
+| P11 | Pairing file protection class, given refresh must run with the screen locked | 3 |
+| P12 | Keep secret query tokens in saved source URLs? Encrypt backups? | 6 |
 
 ## P01 research (2026-11-27, SideStore `develop` at 4f3d18d)
 

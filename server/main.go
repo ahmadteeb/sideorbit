@@ -21,6 +21,7 @@ import (
 	"github.com/ahmadteeb/sideorbit/server/internal/auth"
 	"github.com/ahmadteeb/sideorbit/server/internal/devices"
 	"github.com/ahmadteeb/sideorbit/server/internal/events"
+	"github.com/ahmadteeb/sideorbit/server/internal/metrics"
 	"github.com/ahmadteeb/sideorbit/server/internal/push"
 	"github.com/ahmadteeb/sideorbit/server/internal/safehttp"
 	"github.com/ahmadteeb/sideorbit/server/internal/scheduler"
@@ -99,8 +100,16 @@ func run() error {
 		ReadTimeout:       30 * time.Second,
 		IdleTimeout:       2 * time.Minute,
 	}
-	failed := make(chan error, 1)
+	failed := make(chan error, 2)
 	go func() { failed <- srv.ListenAndServe() }()
+	// A separate listener, so metrics are never reachable through the public one.
+	if cfg.metricsAddr != "" {
+		metrics.WatchPool(db)
+		internal := &http.Server{Addr: cfg.metricsAddr, Handler: metrics.Handler(), ReadHeaderTimeout: 10 * time.Second}
+		defer internal.Close()
+		go func() { failed <- internal.ListenAndServe() }()
+		log.Info("metrics listening", "addr", cfg.metricsAddr)
+	}
 	log.Info("listening", "addr", srv.Addr)
 
 	select {

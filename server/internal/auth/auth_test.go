@@ -893,3 +893,26 @@ func TestSessions(t *testing.T) {
 		t.Errorf("sign-out left alerts on (%d)", out.Code)
 	}
 }
+
+// SessionID must not name a revoked session or another account's.
+func TestSessionIDIsLiveAndOwned(t *testing.T) {
+	e := newEnv(t)
+	cookies := cookieMap(e.oauth("github", url.Values{}))
+	_, me := e.me(req{cookies: []*http.Cookie{cookies[cookieAccess]}})
+	owner := uuid.MustParse(me.ID)
+	ask := func(user uuid.UUID) uuid.UUID {
+		r := httptest.NewRequest(http.MethodGet, "/", nil)
+		r.AddCookie(cookies[cookieRefresh])
+		return e.svc.SessionID(r.WithContext(WithUser(r.Context(), user)))
+	}
+	if ask(owner) == uuid.Nil {
+		t.Fatal("no session for the owner")
+	}
+	if ask(uuid.New()) != uuid.Nil {
+		t.Error("another account's cookie named a session")
+	}
+	e.exec("UPDATE refresh_tokens SET revoked_at = now()")
+	if ask(owner) != uuid.Nil {
+		t.Error("a revoked session is still named")
+	}
+}

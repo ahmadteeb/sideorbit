@@ -8,6 +8,16 @@
 			wrap json
 			fields {
 				request>headers>Sec-Websocket-Protocol delete
+				# Sign-in links and OAuth callbacks carry one-time values in the query.
+				request>uri query {
+					replace token REDACTED
+					replace code REDACTED
+					replace state REDACTED
+				}
+				# Client addresses aren't kept (docs/SECURITY.md).
+				request>remote_ip delete
+				request>client_ip delete
+				request>headers>X-Forwarded-For delete
 				resp_headers>Sec-Websocket-Protocol delete
 			}
 		}
