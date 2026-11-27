@@ -59,8 +59,9 @@ cd deploy && cp .env.example .env && docker compose up -d --build
 # ios (macOS / CI only)
 xcodebuild -project ios/Orbit.xcodeproj -scheme Orbit -configuration Release \
   -destination 'generic/platform=iOS' CODE_SIGNING_ALLOWED=NO build
-# desktop
-cd desktop && bun install && bun tauri build
+# desktop (iloader subtree; pull upstream with:
+#   git subtree pull --prefix=desktop https://github.com/nab138/iloader.git <tag> --squash)
+cd desktop && bun install && bun tauri build --config src-tauri/ci.conf.json
 ```
 
 The development machine has **no Mac**. iOS and macOS desktop builds run only in GitHub Actions (`macos-latest`). Don't claim an iOS change works until `ios.yml` passes, and say clearly what still needs testing on a device.

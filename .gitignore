@@ -41,6 +41,7 @@ xcuserdata/
 
 # --- Desktop (Tauri/Rust) ---
 desktop/**/target/
+desktop/node_modules/
 desktop/dist/
 
 # --- OS / editors ---
