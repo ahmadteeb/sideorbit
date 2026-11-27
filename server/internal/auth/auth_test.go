@@ -592,9 +592,10 @@ func TestAccountLinking(t *testing.T) {
 		first, second   func(*env) *httptest.ResponseRecorder
 		linked          bool
 	}{
-		{"magic link joins", "ada@corp.test", "", oauth("github"), magic, true},
-		{"gmail is authoritative", "ada@gmail.com", "", oauth("github"), oauth("google"), true},
-		{"workspace domain is authoritative", "ada@corp.test", "corp.test", oauth("github"), oauth("google"), true},
+		{"magic link joins", "ada@corp.test", "", oauth("github"), keeping(magic), true},
+		{"gmail is authoritative", "ada@gmail.com", "", oauth("github"), keeping(oauth("google")), true},
+		{"workspace domain is authoritative", "ada@corp.test", "corp.test", oauth("github"), keeping(oauth("google")), true},
+		{"a proven account is joined without asking", "ada@gmail.com", "", magic, oauth("google"), true},
 		{"google for a foreign mailbox", "ada@corp.test", "", oauth("github"), oauth("google"), false},
 		{"another workspace domain", "ada@corp.test", "other.test", oauth("github"), oauth("google"), false},
 		{"github never joins", "ada@gmail.com", "", magic, oauth("github"), false},
@@ -627,6 +628,114 @@ func TestLookalikeEmailRefused(t *testing.T) {
 	if rec := e.emailStart(`{"email":"ada@gma\u0130l.com"}`); rec.Code != 400 {
 		t.Errorf("magic link: %d", rec.Code)
 	}
+}
+
+var hiddenAnswer = regexp.MustCompile(`name="token" value="([^"]+)"`)
+
+func (e *env) answer(token, answer, site string) *httptest.ResponseRecorder {
+	e.t.Helper()
+	return e.do(req{method: "POST", target: "/api/auth/claim", body: url.Values{"token": {token}, "answer": {answer}}.Encode(),
+		header: map[string]string{"Content-Type": "application/x-www-form-urlencoded", "Sec-Fetch-Site": site}})
+}
+
+// asked returns the token of a "was this yours?" page.
+func (e *env) asked(rec *httptest.ResponseRecorder) string {
+	e.t.Helper()
+	body := rec.Body.String()
+	m := hiddenAnswer.FindStringSubmatch(body)
+	if rec.Code != 200 || m == nil || !strings.Contains(body, "Was this account yours?") || cookieMap(rec)[cookieAccess] != nil {
+		e.t.Fatalf("no question: %d %s", rec.Code, body)
+	}
+	return m[1]
+}
+
+// keeping answers "yes" to the question a sign-in raises.
+func keeping(signIn func(*env) *httptest.ResponseRecorder) func(*env) *httptest.ResponseRecorder {
+	return func(e *env) *httptest.ResponseRecorder {
+		return e.answer(e.asked(signIn(e)), "keep", "same-origin")
+	}
+}
+
+// The attack this prevents: someone with a stale "verified" address makes the
+// account first, then the real owner arrives by email link.
+func TestTheMailboxOwnerDecidesAboutAnUnprovenAccount(t *testing.T) {
+	setup := func(t *testing.T) (*env, tokenPair, string) {
+		e := newEnv(t)
+		e.fake.email = "ada@corp.test"
+		earlier := e.signIn() // GitHub, address never proven
+		e.exec("INSERT INTO devices (id, user_id, name) SELECT gen_random_uuid(), id, 'phone' FROM users")
+		e.exec("INSERT INTO sources (id, user_id, url) SELECT gen_random_uuid(), id, 'https://example.com/s.json' FROM users")
+		e.emailStart(`{"email":"ada@corp.test"}`)
+		rec := e.submit(e.sentToken(), "same-origin")
+		for _, want := range []string{"ada@corp.test", "created with GitHub"} {
+			if !strings.Contains(rec.Body.String(), want) {
+				t.Fatalf("page lacks %q: %s", want, rec.Body)
+			}
+		}
+		question := e.asked(rec)
+		if n := e.count("SELECT count(*) FROM identities"); n != 1 {
+			t.Fatalf("linked before answering: %d identities", n)
+		}
+		return e, earlier, question
+	}
+	total := func(e *env, table string) int { return e.count("SELECT count(*) FROM " + table) }
+
+	t.Run("no: the earlier holder is shut out", func(t *testing.T) {
+		e, earlier, question := setup(t)
+		rec := e.answer(question, "remove", "same-origin")
+		if rec.Code != http.StatusSeeOther || cookieMap(rec)[cookieAccess] == nil {
+			t.Fatalf("answer: %d %s", rec.Code, rec.Body)
+		}
+		_, me := e.me(req{cookies: []*http.Cookie{cookieMap(rec)[cookieAccess]}})
+		if len(me.Identities) != 1 || me.Identities[0] != "email" || total(e, "devices") != 0 || total(e, "sources") != 0 {
+			t.Errorf("identities %v, %d devices, %d sources", me.Identities, total(e, "devices"), total(e, "sources"))
+		}
+		if res, _ := e.token(refresh(earlier.RefreshToken)); res.Code != 400 {
+			t.Errorf("the earlier session survives: %d", res.Code)
+		}
+		if status, _ := e.me(req{header: bearer(earlier.AccessToken)}); status == 200 && total(e, "refresh_tokens") != 1 {
+			t.Errorf("unexpected sessions: %d", total(e, "refresh_tokens"))
+		}
+		// Their provider can't get back in: the address is proven now.
+		if got := e.callback("github", url.Values{}).Header().Get("Location"); got != "/login?error=account_exists" {
+			t.Errorf("GitHub again: %q", got)
+		}
+	})
+	t.Run("yes: nothing is lost", func(t *testing.T) {
+		e, earlier, question := setup(t)
+		if rec := e.answer(question, "keep", "same-origin"); rec.Code != http.StatusSeeOther {
+			t.Fatalf("answer: %d", rec.Code)
+		}
+		if total(e, "identities") != 2 || total(e, "devices") != 1 || total(e, "sources") != 1 {
+			t.Errorf("identities %d devices %d", total(e, "identities"), total(e, "devices"))
+		}
+		if res, _ := e.token(refresh(earlier.RefreshToken)); res.Code != 200 {
+			t.Errorf("own session ended: %d", res.Code)
+		}
+		// Answered once: going back and pressing "No" removes nothing.
+		if rec := e.answer(question, "remove", "same-origin"); rec.Code != 400 || total(e, "devices") != 1 {
+			t.Errorf("second answer: %d, %d devices", rec.Code, total(e, "devices"))
+		}
+	})
+	t.Run("refused answers change nothing", func(t *testing.T) {
+		e, earlier, question := setup(t)
+		for name, tt := range map[string]struct {
+			token, answer, site string
+			want                int
+		}{
+			"another site":  {question, "remove", "cross-site", 403},
+			"forged":        {"nonsense", "remove", "same-origin", 400},
+			"another token": {earlier.AccessToken, "remove", "same-origin", 400},
+			"no answer":     {question, "", "same-origin", 400},
+		} {
+			if rec := e.answer(tt.token, tt.answer, tt.site); rec.Code != tt.want {
+				t.Errorf("%s: %d", name, rec.Code)
+			}
+		}
+		if total(e, "devices") != 1 || total(e, "identities") != 1 {
+			t.Error("something changed")
+		}
+	})
 }
 
 // A rotation racing a revocation must not leave a live token behind.

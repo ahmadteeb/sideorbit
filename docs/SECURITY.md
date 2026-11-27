@@ -16,6 +16,7 @@
 | Apple credentials at rest on device | Keychain with `kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly` (so background refresh still works). Never in UserDefaults or logs |
 | Anisette abuse | Gateway auth required, per-user/device/IP/total rate limits, provisioning caps, account device cap (D24), rate-limit hits logged and counted in `/metrics`. The container is not exposed publicly |
 | Account takeover via OAuth | PKCE + `state` + exact redirect allowlist. The iOS code exchange is bound to a `code_challenge`. Codes are single-use with a 60s TTL. Native sign-ins need a button press first (D32). **Residual risk:** `orbit://` can be claimed by another app; PKCE and the button limit but don't remove it |
+| Account pre-claimed with a stale address | The first sign-in that proves the mailbox is asked about an account that never did; "No" removes its other sign-in methods, sessions and data (D38). **Relies on the person reading the page** |
 | Magic link attacks | 15-min single-use hashed tokens, rate limits per email + IP, no enumeration (always 202) |
 | Refresh token theft | Rotation with reuse detection (revoke family), 30-day absolute expiry. A web token works only from the cookie and a native token only from the request body (not bound to a device) |
 | SSRF via source URLs | https only, resolve and block private/loopback/link-local ranges, 5s timeout, 2 MB cap, no redirects to blocked ranges |
@@ -30,8 +31,6 @@
 
 Found in the 2026-11-27 audit and waiting for a decision (see DECISIONS.md → Pending):
 
-- **P08, high:** someone holding a stale "verified" address at a provider can create the account first; the real owner's magic link then joins it, and the earlier identity keeps access. **Decide before real users sign up.**
-- **P09:** web push endpoints may be any public HTTPS host.
 - **P10:** the shared caps on sign-in email and on provisioning can be used up by someone with several addresses and accounts, blocking others for an hour.
 - **P12:** saved source URLs are stored whole, including any secret query token, and backups are unencrypted and keep deleted data for 14 days.
 
@@ -40,7 +39,7 @@ Found in the 2026-11-27 audit and waiting for a decision (see DECISIONS.md → P
 | Date | Scope | Result |
 |---|---|---|
 | 2026-11-26/27 | Per-PR reviews of auth, the gateway and iOS sign-in | Fixed before merge |
-| 2026-11-27 | Whole repository | No path for Apple credentials to reach the server. 2 high, 4 medium, 6 low. Fixed: slow push endpoints stalling alerts, quota drained by plain GETs, push subscriptions from dead sessions, unbounded report history, tokens and addresses in proxy logs, permission screen wording, deletion race, anisette capabilities, stricter report fields, restore and example-secret handling. Open: P08-P10, P12 |
+| 2026-11-27 | Whole repository | No path for Apple credentials to reach the server. 2 high, 4 medium, 6 low. Fixed: slow push endpoints stalling alerts, quota drained by plain GETs, push subscriptions from dead sessions, unbounded report history, tokens and addresses in proxy logs, permission screen wording, deletion race, anisette capabilities, stricter report fields, restore and example-secret handling. Open then: P08-P10, P12. P08 and P09 closed by D38 and D39 |
 
 A compromised anisette image could still reach the API on their shared network and forge the client address that rate limits use. The image is pinned by digest.
 

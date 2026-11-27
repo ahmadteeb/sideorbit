@@ -99,6 +99,8 @@ func (s *Service) Routes(r chi.Router) {
 	// Same-origin only, so another site can't press the button for the user.
 	r.Method(http.MethodPost, "/api/auth/confirm",
 		http.NewCrossOriginProtection().Handler(http.HandlerFunc(s.confirm)))
+	r.Method(http.MethodPost, "/api/auth/claim",
+		http.NewCrossOriginProtection().Handler(http.HandlerFunc(s.claim)))
 	r.Post("/api/auth/token", s.token)
 	r.Post("/api/auth/logout", s.logout)
 	r.Group(func(r chi.Router) {
@@ -173,6 +175,9 @@ func (s *Service) allowedRedirect(client, raw string) bool {
 }
 
 var (
+	// errNeedsClaim: the address is proven now, but the account was made by a
+	// sign-in that never proved it. The person is asked about it (D38).
+	errNeedsClaim    = errors.New("an unproven account already uses this email")
 	errAccountExists = errors.New("an account with this email already exists")
 	errBadEmail      = errors.New("unsupported email address")
 )
@@ -185,7 +190,8 @@ func ascii(s string) bool {
 
 // findOrCreateUser returns the account for a verified identity. A new identity
 // joins an existing account with the same email only if it shows control of the
-// mailbox now (D25).
+// mailbox now (D25). If that account never proved the address, it returns the
+// account with errNeedsClaim and changes nothing.
 func (s *Service) findOrCreateUser(ctx context.Context, provider string, id identity) (db.User, error) {
 	if !ascii(id.email) {
 		return db.User{}, errBadEmail
@@ -202,9 +208,11 @@ func (s *Service) findOrCreateUser(ctx context.Context, provider string, id iden
 			}
 			user, err = q.GetUserByEmail(ctx, email)
 			if errors.Is(err, pgx.ErrNoRows) {
-				user, err = q.CreateUser(ctx, db.CreateUserParams{ID: newID(), Email: &email, DisplayName: optional(id.name)})
+				user, err = q.CreateUser(ctx, db.CreateUserParams{ID: newID(), Email: &email, DisplayName: optional(id.name), Proven: id.ownsMailbox})
 			} else if err == nil && !id.ownsMailbox {
 				return errAccountExists
+			} else if err == nil && user.EmailProvenAt == nil {
+				return errNeedsClaim
 			}
 			if err != nil {
 				return err

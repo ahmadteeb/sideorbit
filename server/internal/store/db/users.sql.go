@@ -20,6 +20,15 @@ func (q *Queries) AnonymizeUser(ctx context.Context, id uuid.UUID) error {
 	return err
 }
 
+const clearDisplayName = `-- name: ClearDisplayName :exec
+UPDATE users SET display_name = NULL WHERE id = $1
+`
+
+func (q *Queries) ClearDisplayName(ctx context.Context, id uuid.UUID) error {
+	_, err := q.db.Exec(ctx, clearDisplayName, id)
+	return err
+}
+
 const createIdentity = `-- name: CreateIdentity :exec
 INSERT INTO identities (id, user_id, provider, subject) VALUES ($1, $2, $3, $4)
 ON CONFLICT (provider, subject) DO NOTHING
@@ -43,17 +52,24 @@ func (q *Queries) CreateIdentity(ctx context.Context, arg CreateIdentityParams) 
 }
 
 const createUser = `-- name: CreateUser :one
-INSERT INTO users (id, email, display_name) VALUES ($1, $2, $3) RETURNING id, email, display_name, created_at, deleted_at
+INSERT INTO users (id, email, display_name, email_proven_at)
+VALUES ($1, $2, $3, CASE WHEN $4::boolean THEN now() END) RETURNING id, email, display_name, created_at, deleted_at, email_proven_at
 `
 
 type CreateUserParams struct {
 	ID          uuid.UUID
 	Email       *string
 	DisplayName *string
+	Proven      bool
 }
 
 func (q *Queries) CreateUser(ctx context.Context, arg CreateUserParams) (User, error) {
-	row := q.db.QueryRow(ctx, createUser, arg.ID, arg.Email, arg.DisplayName)
+	row := q.db.QueryRow(ctx, createUser,
+		arg.ID,
+		arg.Email,
+		arg.DisplayName,
+		arg.Proven,
+	)
 	var i User
 	err := row.Scan(
 		&i.ID,
@@ -61,6 +77,7 @@ func (q *Queries) CreateUser(ctx context.Context, arg CreateUserParams) (User, e
 		&i.DisplayName,
 		&i.CreatedAt,
 		&i.DeletedAt,
+		&i.EmailProvenAt,
 	)
 	return i, err
 }
@@ -102,7 +119,7 @@ func (q *Queries) DeleteUserSources(ctx context.Context, userID uuid.UUID) error
 }
 
 const getActiveUser = `-- name: GetActiveUser :one
-SELECT id, email, display_name, created_at, deleted_at FROM users WHERE id = $1 AND deleted_at IS NULL
+SELECT id, email, display_name, created_at, deleted_at, email_proven_at FROM users WHERE id = $1 AND deleted_at IS NULL
 `
 
 func (q *Queries) GetActiveUser(ctx context.Context, id uuid.UUID) (User, error) {
@@ -114,12 +131,13 @@ func (q *Queries) GetActiveUser(ctx context.Context, id uuid.UUID) (User, error)
 		&i.DisplayName,
 		&i.CreatedAt,
 		&i.DeletedAt,
+		&i.EmailProvenAt,
 	)
 	return i, err
 }
 
 const getUserByEmail = `-- name: GetUserByEmail :one
-SELECT id, email, display_name, created_at, deleted_at FROM users WHERE email = $1::citext AND deleted_at IS NULL
+SELECT id, email, display_name, created_at, deleted_at, email_proven_at FROM users WHERE email = $1::citext AND deleted_at IS NULL
 `
 
 func (q *Queries) GetUserByEmail(ctx context.Context, email string) (User, error) {
@@ -131,12 +149,13 @@ func (q *Queries) GetUserByEmail(ctx context.Context, email string) (User, error
 		&i.DisplayName,
 		&i.CreatedAt,
 		&i.DeletedAt,
+		&i.EmailProvenAt,
 	)
 	return i, err
 }
 
 const getUserByIdentity = `-- name: GetUserByIdentity :one
-SELECT u.id, u.email, u.display_name, u.created_at, u.deleted_at FROM users u
+SELECT u.id, u.email, u.display_name, u.created_at, u.deleted_at, u.email_proven_at FROM users u
 JOIN identities i ON i.user_id = u.id
 WHERE i.provider = $1 AND i.subject = $2 AND u.deleted_at IS NULL
 `
@@ -155,6 +174,7 @@ func (q *Queries) GetUserByIdentity(ctx context.Context, arg GetUserByIdentityPa
 		&i.DisplayName,
 		&i.CreatedAt,
 		&i.DeletedAt,
+		&i.EmailProvenAt,
 	)
 	return i, err
 }
@@ -192,4 +212,13 @@ func (q *Queries) LockUser(ctx context.Context, id uuid.UUID) (uuid.UUID, error)
 	var id_2 uuid.UUID
 	err := row.Scan(&id_2)
 	return id_2, err
+}
+
+const markEmailProven = `-- name: MarkEmailProven :exec
+UPDATE users SET email_proven_at = now() WHERE id = $1
+`
+
+func (q *Queries) MarkEmailProven(ctx context.Context, id uuid.UUID) error {
+	_, err := q.db.Exec(ctx, markEmailProven, id)
+	return err
 }

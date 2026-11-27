@@ -92,7 +92,7 @@ func (s *Service) emailStart(w http.ResponseWriter, r *http.Request) {
 }
 
 // The pages use browser defaults so they follow the system theme and text size.
-const pageStyle = `body{font-family:system-ui,sans-serif;line-height:1.5;max-width:32rem;margin:0 auto;padding:2rem 1rem;overflow-wrap:anywhere}button{font:inherit;min-height:44px;padding:0 1.5rem}`
+const pageStyle = `body{font-family:system-ui,sans-serif;line-height:1.5;max-width:32rem;margin:0 auto;padding:2rem 1rem;overflow-wrap:anywhere}button{font:inherit;min-height:44px;padding:0 1.5rem;margin:0 .5rem .5rem 0}`
 
 var pageCSP = func() string {
 	sum := sha256.Sum256([]byte(pageStyle))
@@ -111,7 +111,15 @@ var page = template.Must(template.New("page").Parse(`<!doctype html>
 </head>
 <body>
 <main>
-{{if .Token}}<h1>Sign in to Orbit</h1>
+{{if .How}}<h1>Was this account yours?</h1>
+<p>An Orbit account for <strong>{{.Email}}</strong> was already created with {{.How}} on {{.Since}}. You've just shown the address is yours now.</p>
+<p>Did you create that account? If you're not sure, choose "No": someone who used this address before you could still sign in to it.</p>
+<form method="post" action="/api/auth/claim">
+<input type="hidden" name="token" value="{{.Token}}">
+<button type="submit" name="answer" value="keep">Yes, keep it</button>
+<button type="submit" name="answer" value="remove">No, remove everything in it</button>
+</form>
+<p>"No" deletes its devices, history, app sources and other sign-in methods. You'll then continue in the {{.App}} with an empty account.</p>{{else if .Token}}<h1>Sign in to Orbit</h1>
 <p>Continue as <strong>{{.Email}}</strong> in the <strong>{{.App}}</strong>.</p>
 <p>If that isn't your address, or you didn't just ask for this link there, close this page.</p>
 <form method="post" action="{{.Action}}">
@@ -126,14 +134,29 @@ var page = template.Must(template.New("page").Parse(`<!doctype html>
 
 var appNames = map[string]string{ClientWeb: "web dashboard", ClientIOS: "Orbit iPhone app", ClientDesktop: "Orbit Setup desktop app"}
 
+type pageData struct {
+	Action, Token, Email, App string
+	How, Since                string // set only for the "was this yours?" question
+}
+
+type claimPage struct{ Token, Email, App, How, Since string }
+
 func writePage(w http.ResponseWriter, status int, action, token, email, client string) {
+	render(w, status, pageData{Action: action, Token: token, Email: email, App: appNames[client]})
+}
+
+func writeClaimPage(w http.ResponseWriter, p claimPage) {
+	render(w, http.StatusOK, pageData{Token: p.Token, Email: p.Email, App: p.App, How: p.How, Since: p.Since})
+}
+
+func render(w http.ResponseWriter, status int, data pageData) {
 	h := w.Header()
 	h.Set("Content-Type", "text/html; charset=utf-8")
 	h.Set("Content-Security-Policy", pageCSP)
 	h.Set("Referrer-Policy", "same-origin") // the token is in the URL
 	h.Set("Cache-Control", "no-store")
 	w.WriteHeader(status)
-	_ = page.Execute(w, struct{ Action, Token, Email, App string }{action, token, email, appNames[client]})
+	_ = page.Execute(w, data)
 }
 
 // emailConfirm only shows a button. Mail scanners open links, and a GET that
@@ -164,14 +187,19 @@ func (s *Service) emailVerify(w http.ResponseWriter, r *http.Request) {
 		httpx.Internal(w, r, err)
 		return
 	}
-	user, err := s.findOrCreateUser(r.Context(), "email", identity{subject: *code.Email, email: *code.Email, ownsMailbox: true})
-	if err != nil {
-		httpx.Internal(w, r, err)
-		return
-	}
+	id := identity{subject: *code.Email, email: *code.Email, ownsMailbox: true}
+	user, err := s.findOrCreateUser(r.Context(), "email", id)
 	t := target{client: *code.Client}
 	if code.CodeChallenge != nil && code.Redirect != nil {
 		t.challenge, t.redirect = *code.CodeChallenge, *code.Redirect
+	}
+	if errors.Is(err, errNeedsClaim) {
+		s.askAboutAccount(w, r, user, "email", id, t)
+		return
+	}
+	if err != nil {
+		httpx.Internal(w, r, err)
+		return
 	}
 	s.log.Info("identity verified", "provider", "email", "user_id", user.ID, "client", t.client)
 	s.finish(w, r, user, t, http.StatusSeeOther)

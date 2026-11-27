@@ -34,6 +34,7 @@ const (
 	audState   = "orbit-oauth-state"
 	audDelete  = "orbit-delete-account"
 	audConfirm = "orbit-confirm-app-sign-in"
+	audClaim   = "orbit-claim-account"
 
 	cookieAccess  = "orbit_access"
 	cookieRefresh = "orbit_refresh"

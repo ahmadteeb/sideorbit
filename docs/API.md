@@ -13,6 +13,7 @@ Base URL: `https://<ORBIT_DOMAIN>`. JSON everywhere. Auth uses `Authorization: B
 | POST | `/api/auth/email/verify` | Form field `token`. Single-use, 15 min, same-origin only. Same client handling as the OAuth callback |
 | GET | `/api/auth/methods` | `{github, google, email}`: which sign-in methods are configured. Public |
 | POST | `/api/auth/confirm` | The native page's button (form field `token`, 5 min, same-origin only). Redirects to `orbit://auth/callback?code=` / `http://127.0.0.1:<port>/callback?code=` |
+| POST | `/api/auth/claim` | The "was this account yours?" page's buttons (form fields `token`, `answer=keep\|remove`; 5 min, same-origin, answered once). Shown instead of a session when a mailbox-proving sign-in finds an account whose address was never proven (D38) |
 | POST | `/api/auth/token` | `{grant_type:"authorization_code", code, code_verifier}` or `{grant_type:"refresh_token", refresh_token}` → `{access_token, expires_in, refresh_token}` |
 | POST | `/api/auth/logout` | `{refresh_token}` (or the web cookie). Revokes the refresh token family; 204 |
 | GET | `/api/me` | Profile, linked identities, limits |
@@ -77,7 +78,7 @@ The server **must reject** any field it doesn't know (`DisallowUnknownFields`) s
 | Method | Path | Notes |
 |---|---|---|
 | GET | `/api/push/vapid-public-key` | `{public_key}`. The push routes exist only when VAPID keys are configured |
-| POST | `/api/push/subscriptions` | Browser `PushSubscription` JSON → `{id}`. Same endpoint → same id (re-posting moves it to the caller). At most 10 per account. Needs a live web session (403 `session_required` otherwise); signing it out or revoking it removes the subscription. A session that simply expires keeps its alerts |
+| POST | `/api/push/subscriptions` | Browser `PushSubscription` JSON → `{id}`. The endpoint must be Apple's, Google's, Mozilla's or Microsoft's push service (400 `unsupported_push_service`). Same endpoint → same id (re-posting moves it to the caller). At most 10 per account. Needs a live web session (403 `session_required` otherwise); signing it out or revoking it removes the subscription. A session that simply expires keeps its alerts |
 | DELETE | `/api/push/subscriptions/{id}` | |
 | POST | `/api/push/test` | `{sent, failed}`; 409 with no subscriptions; 5/min |
 
