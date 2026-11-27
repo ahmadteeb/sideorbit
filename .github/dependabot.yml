@@ -12,8 +12,9 @@ updates:
     cooldown: { default-days: 14 }
     groups: { web: { patterns: ["*"] } }
     ignore:
-      # AGENTS.md fixes SvelteKit 2; moving to 3 is a deliberate change.
-      - dependency-name: "@sveltejs/*"
+      # Major upgrades (SvelteKit is fixed at 2 by AGENTS.md; TypeScript, Vite
+      # and Vitest move together) are deliberate changes, not routine updates.
+      - dependency-name: "*"
         update-types: ["version-update:semver-major"]
   - package-ecosystem: github-actions
     directory: /
