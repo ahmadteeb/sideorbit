@@ -8,6 +8,7 @@
 *.pem
 *.key
 *.mobileprovision
+deploy/orbit-local-ca.crt
 *.mobiledevicepairing
 *PairingFile*.plist
 # usbmuxd pairing records are named after the device UDID

@@ -41,7 +41,7 @@ Orbit signs and installs apps **on your iPhone** and refreshes them before they 
 No Mac? That's fine: iOS and macOS builds run in GitHub Actions.
 
 ## Docs
-[Architecture](docs/ARCHITECTURE.md) · [Decisions](docs/DECISIONS.md) · [Roadmap](docs/ROADMAP.md) · [API](docs/API.md) · [Data model](docs/DATA_MODEL.md) · [Security](docs/SECURITY.md) · [iOS app](docs/IOS_APP.md) · [Desktop setup app](docs/DESKTOP_SETUP_APP.md) · [Dashboard](docs/WEB_DASHBOARD.md) · [Self-hosting](docs/SELF_HOSTING.md) · [User guide](docs/USER_GUIDE.md) · [Licensing](docs/LICENSING.md) · [UX checklist](docs/UX_CHECKLIST.md) · [Design system](design-system/orbit/MASTER.md)
+[Architecture](docs/ARCHITECTURE.md) · [Decisions](docs/DECISIONS.md) · [Roadmap](docs/ROADMAP.md) · [API](docs/API.md) · [Data model](docs/DATA_MODEL.md) · [Security](docs/SECURITY.md) · [iOS app](docs/IOS_APP.md) · [Desktop setup app](docs/DESKTOP_SETUP_APP.md) · [Dashboard](docs/WEB_DASHBOARD.md) · [Self-hosting](docs/SELF_HOSTING.md) · [Local testing](docs/LOCAL_TESTING.md) · [User guide](docs/USER_GUIDE.md) · [Licensing](docs/LICENSING.md) · [UX checklist](docs/UX_CHECKLIST.md) · [Design system](design-system/orbit/MASTER.md)
 
 ## Renaming "Orbit"
 "Orbit" and `dev.orbitstore` are placeholders. To rename before Phase 0, replace all occurrences:

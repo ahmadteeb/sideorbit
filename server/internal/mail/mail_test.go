@@ -77,3 +77,19 @@ func TestSendRejectsHeaderInjection(t *testing.T) {
 		}
 	}
 }
+
+// "localhost." resolves to this machine but isn't treated as local, like a mail
+// server elsewhere that offers no encryption.
+func TestPlaintextNeedsPermission(t *testing.T) {
+	tests := []struct {
+		allow   bool
+		wantErr bool
+	}{{false, true}, {true, false}}
+	for _, tt := range tests {
+		port, _ := fakeSMTP(t)
+		s := SMTP{Host: "localhost.", Port: port, From: "no-reply@example.com", AllowPlaintext: tt.allow}
+		if err := s.Send(context.Background(), "a@example.com", "x", "y"); (err != nil) != tt.wantErr {
+			t.Errorf("allow=%v: %v", tt.allow, err)
+		}
+	}
+}

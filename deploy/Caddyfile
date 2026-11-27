@@ -1,5 +1,7 @@
 {
 	email {$ACME_EMAIL}
+	# Empty in production; local testing adds to it (docker-compose.local.yml).
+	{$ORBIT_GLOBAL_EXTRA}
 
 	# Error logs include request headers. Caddy redacts Authorization and Cookie
 	# itself, but WebSocket clients may carry their token in this one.
@@ -25,6 +27,7 @@
 }
 
 {$ORBIT_DOMAIN} {
+	{$ORBIT_TLS}
 	encode zstd gzip
 
 	# Never expose internal metrics publicly
@@ -46,3 +49,6 @@
 	# API, anisette gateway (incl. WebSocket) and dashboard are all served by orbit-server
 	reverse_proxy orbit-server:8080
 }
+
+# Nothing here in production.
+import extra/*.caddy

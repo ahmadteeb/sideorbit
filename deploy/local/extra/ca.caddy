@@ -1,0 +1,11 @@
+# Hands out the local certificate authority (the public certificate only), so a
+# phone can install it. Plain HTTP, because the phone doesn't trust us yet.
+http://{$ORBIT_DOMAIN}:8081 {
+	handle /ca.crt {
+		root * /data/caddy/pki/authorities/local
+		rewrite * /root.crt
+		header Content-Type application/x-x509-ca-cert
+		file_server
+	}
+	respond 404
+}
