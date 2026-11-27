@@ -4,15 +4,102 @@ on:
   push:
     branches: [main]
   pull_request:
+  workflow_call: # release.yml
+  workflow_dispatch:
 
 permissions:
   contents: read
 
 jobs:
   desktop:
+    # The names are required status checks: keep them stable.
+    name: desktop (${{ matrix.name }})
     strategy:
+      fail-fast: false
       matrix:
-        os: [macos-latest, windows-latest, ubuntu-latest]
+        include:
+          - { name: macos-latest, os: macos-latest, args: "--target universal-apple-darwin" }
+          - { name: windows-latest, os: windows-latest, args: "" }
+          # The oldest supported runner, so the binaries run on older distributions.
+          - { name: ubuntu-latest, os: ubuntu-22.04, args: "" }
     runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        shell: bash
+        working-directory: desktop
     steps:
-      - run: echo "Placeholder. The iloader fork and real build arrive in Phase 4."
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+
+      # A full build takes many minutes; changes elsewhere don't need one.
+      - name: Did the desktop app change?
+        id: changed
+        working-directory: .
+        env:
+          EVENT: ${{ github.event_name }}
+          BASE: ${{ github.base_ref }}
+        run: |
+          case "$EVENT" in
+            pull_request) range="origin/$BASE...HEAD" ;;
+            push) range="HEAD^1..HEAD" ;;
+            *) range="" ;;
+          esac
+          if [ -n "$range" ] && git diff --quiet "$range" -- desktop .github/workflows/desktop.yml; then
+            echo "build=false" >> "$GITHUB_OUTPUT"
+            echo "No desktop changes: nothing to build."
+          else
+            echo "build=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Linux libraries
+        if: steps.changed.outputs.build == 'true' && runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf perl make xdg-utils libdbus-1-dev
+
+      - name: Rust
+        if: steps.changed.outputs.build == 'true'
+        run: |
+          rustup toolchain install stable --profile minimal -c clippy
+          rustup default stable
+          if [ "$RUNNER_OS" = macOS ]; then rustup target add aarch64-apple-darwin x86_64-apple-darwin; fi
+
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        if: steps.changed.outputs.build == 'true'
+        with:
+          bun-version: "1.4.4"
+
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        if: steps.changed.outputs.build == 'true'
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            desktop/src-tauri/target
+          key: desktop-${{ matrix.os }}-${{ hashFiles('desktop/src-tauri/Cargo.lock') }}
+          restore-keys: desktop-${{ matrix.os }}-
+
+      - name: Frontend dependencies
+        if: steps.changed.outputs.build == 'true'
+        run: bun install --frozen-lockfile
+
+      # ci.conf.json (upstream's) turns off updater artifacts, which need
+      # upstream's signing key.
+      - name: Build
+        if: steps.changed.outputs.build == 'true'
+        run: bun run tauri build ${{ matrix.args }} --config src-tauri/ci.conf.json
+
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: steps.changed.outputs.build == 'true'
+        with:
+          name: desktop-${{ matrix.name }}
+          path: |
+            desktop/src-tauri/target/**/release/bundle/dmg/*.dmg
+            desktop/src-tauri/target/release/bundle/msi/*.msi
+            desktop/src-tauri/target/release/bundle/nsis/*.exe
+            desktop/src-tauri/target/release/bundle/deb/*.deb
+            desktop/src-tauri/target/release/bundle/rpm/*.rpm
+            desktop/src-tauri/target/release/bundle/appimage/*.AppImage
+          if-no-files-found: error

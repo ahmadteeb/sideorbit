@@ -9,7 +9,8 @@
 | `coder/websocket` (tests only) | ISC | Not part of the server binary |
 | `prometheus/client_golang` and its libraries | Apache-2.0 (protobuf BSD-3-Clause) | Compatible with AGPL-3.0 |
 | `grafana/k6` | AGPL-3.0 | A tool run by operators; not part of Orbit |
-| `nab138/iloader` | MIT | Can be forked into `desktop/`; keep its copyright notice |
+| `nab138/iloader` (subtree in `desktop/`, from v2.4.2) | MIT for the code. **Name and logos are not** (`desktop/LICENSE-BRANDING`) | Keep `desktop/LICENSE`; replace the name and artwork before shipping |
+| `nab138/isideload`, `jkcoxson/idevice` (via iloader) | MIT | Compatible |
 | `Dadoum/anisette-v3-server` | **No license file found in the repo** (checked Nov 2026) | We **run the unmodified upstream Docker image** and don't copy or modify its code. Don't vendor or fork it without permission from the author |
 | LiveContainer | Verify in Phase 5 (P05) | Decide the integration approach after checking |
 | usbmuxd (bundled on Linux) | GPL (verify version) | Ship it as a separate binary with notice + source offer |
