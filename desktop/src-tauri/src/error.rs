@@ -21,6 +21,7 @@ pub enum AppError {
     Developer(String),
     #[error("{0}")]
     Auth(String),
+    #[allow(dead_code)] // ORBIT: only the removed SideStore install used it
     #[error("{0}")]
     Download(String),
     #[error("{0}: {1}")]
@@ -70,7 +71,8 @@ impl Serialize for AppError {
 // from rootcause report
 impl From<Report> for AppError {
     fn from(report: Report) -> Self {
-        let report_str = report.to_string();
+        // ORBIT: HTTP errors can quote the anisette proxy's secret address.
+        let report_str = crate::orbit::privacy::redact(&report.to_string());
 
         for cause in report.iter_reports() {
             if cause.downcast_current_context::<keyring::Error>().is_some() {

@@ -21,6 +21,8 @@
 | SSRF via source URLs | https only, resolve and block private/loopback/link-local ranges, 5s timeout, 2 MB cap, no redirects to blocked ranges |
 | Malicious IPAs from sources | Orbit shows the source URL, bundle ID and requested entitlements before install. Warn on unknown sources. We don't host IPAs |
 | XSS / CSRF on the dashboard | Strict CSP (no inline scripts), `__Host-` SameSite=Lax cookies + a required CSRF header on cookie-auth mutations, output escaping (Svelte default) |
+| Secrets in desktop logs and files | Only Orbit Setup's own code logs at debug level; the proxy secret is removed from error text; without a keyring, files live in an owner-only folder; apps are unpacked in a private temp folder on Linux. Developer tools and the auto-updater are off |
+| Local programs and the anisette proxy | Binds `127.0.0.1` only, needs a 256-bit path secret, forwards three endpoints, and drops the caller's credentials |
 | Desktop helper privilege | The polkit/UAC prompt only performs a fixed, auditable action (udev rule install / winget Apple Devices). No arbitrary command execution |
 | Supply chain | Lockfiles; monthly Dependabot with a 14-day cooldown; actions pinned by SHA; anisette image pinned by digest; releases only from commits on `main`, with checksums. *Not yet:* other base images pinned by digest, reproducible builds |
 

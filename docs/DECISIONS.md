@@ -40,6 +40,7 @@ Format: **ID · Decision** · *Why* · Alternatives rejected. Add new entries at
 | D34 | **Releases publish only from a tag on a commit in `main`, through the `release` environment; running the workflow by hand is a dry run** | A tag alone shouldn't publish unreviewed code | Publishing on any tag |
 | D35 | **Orbit Setup reaches anisette through a proxy on `127.0.0.1` that adds the Orbit token; the path carries a random secret** | The sign-in library (`isideload`) takes a URL but can't send headers. No fork needed, and anisette traffic holds no Apple credentials | Forking `isideload`; a public anisette server (D04) |
 | D36 | **Orbit Setup drops upstream's updater, developer tools, public anisette list and SideStore/LiveContainer downloads, and uses its own name, icon and keyring entries** | The updater would install iloader over it; devtools don't belong in an app that handles Apple passwords; `LICENSE-BRANDING` reserves the name and artwork | Shipping upstream's defaults |
+| D37 | **Orbit Setup logs dependencies at INFO and above only. Without a system keyring, upstream's file storage stays but in an owner-only folder** | Debug output held the Apple ID email and anisette data, and logs get pasted into bug reports. Memory-only storage would mint a new Apple certificate every launch, which can revoke the one installed apps depend on | DEBUG everywhere; in-memory fallback |
 
 ## Pending decisions (to be resolved during the named phase)
 

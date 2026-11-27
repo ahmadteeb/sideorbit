@@ -515,6 +515,7 @@ pub async fn installed_pairing_apps(
     Ok(result)
 }
 
+#[allow(dead_code)] // ORBIT: only the removed SideStore install used it
 pub async fn get_sidestore_info(
     device: &DeviceInfo,
     live_container: bool,

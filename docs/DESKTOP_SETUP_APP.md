@@ -8,7 +8,7 @@ UI spec: `design-system/orbit/pages/desktop.md`.
 - Orbit changes: branding, the wizard flow, Orbit login, the anisette gateway URL (+ bearer token), driver bootstrap, "Re-pair only" mode, and LiveContainer+Orbit selection.
 
 ## What exists today
-Upstream iloader, rebranded, plus: Orbit sign-in (browser or email link, loopback redirect with PKCE), the refresh token in the system keyring, and Apple sign-in using only your server's anisette gateway through a local proxy (D35). The user picks an IPA to install. The wizard, driver bootstrap, Orbit pairing placement and diagnostics below are not built.
+Upstream iloader, rebranded, plus: Orbit sign-in (browser or email link, loopback redirect with PKCE), the refresh token in the system keyring, and Apple sign-in using only your server's anisette gateway through a local proxy (D35). The user picks an IPA to install. One instance runs at a time, signing out of Orbit also drops the Apple sign-in, and logs carry no dependency debug output (D37). The sign-in screen is English only and uses system fonts. The wizard, driver bootstrap, Orbit pairing placement and diagnostics below are not built.
 
 ### Test matrix (for a human; nothing has been run on real hardware)
 

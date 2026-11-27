@@ -2,16 +2,20 @@
 //! (`git subtree pull`) stay easy; edits elsewhere are marked "ORBIT:".
 
 pub mod login;
+pub mod privacy;
 pub mod proxy;
 pub mod session;
 #[cfg(test)]
 pub mod testing;
 
-use std::sync::{Arc, Mutex};
+use std::{
+    future::Future,
+    sync::{Arc, Mutex},
+};
 
 use base64::{Engine, engine::general_purpose::URL_SAFE_NO_PAD};
 use serde::Serialize;
-use tauri::{AppHandle, Manager, State};
+use tauri::{AppHandle, Emitter, Manager, State};
 use tauri_plugin_opener::OpenerExt;
 use tokio::sync::{OnceCell, oneshot};
 
@@ -45,7 +49,13 @@ pub fn random_token() -> String {
 pub async fn anisette_url(app: &AppHandle) -> Result<String, String> {
     let orbit = app.state::<Orbit>();
     // Fails early, with a clear message, when not signed in.
-    orbit.account.access_token().await?;
+    if let Err(message) = orbit.account.access_token().await {
+        // The server ended the session: the window has to show sign-in again.
+        if orbit.account.server().await.is_none() {
+            let _ = app.emit("orbit-signed-out", ());
+        }
+        return Err(message);
+    }
     orbit
         .anisette
         .get_or_try_init(|| proxy::start(orbit.account.clone()))
@@ -57,12 +67,16 @@ pub async fn anisette_url(app: &AppHandle) -> Result<String, String> {
 #[derive(Serialize)]
 pub struct Status {
     server: Option<String>,
+    /// Which account, so a sign-in to the wrong one is visible.
+    email: Option<String>,
 }
 
 #[tauri::command]
 pub async fn orbit_status(orbit: State<'_, Orbit>) -> Result<Status, String> {
+    let email = orbit.account.email().await;
     Ok(Status {
         server: orbit.account.server().await.map(String::from),
+        email,
     })
 }
 
@@ -83,10 +97,13 @@ pub async fn orbit_sign_in(
     let (listener, redirect) = login::listen().await.map_err(|e| e.to_string())?;
     let verifier = random_token();
     let url = login::start_url(&server, &provider, &login::challenge(&verifier), &redirect)?;
-    app.opener()
-        .open_url(url, None::<&str>)
-        .map_err(|e| format!("Couldn't open your browser: {e}"))?;
-    finish(&orbit, &server, listener, &verifier).await
+    let attempt = async {
+        app.opener()
+            .open_url(url, None::<&str>)
+            .map_err(|e| format!("Couldn't open your browser: {e}"))?;
+        finish(&orbit, &server, listener, &verifier).await
+    };
+    cancellable(&orbit, attempt).await
 }
 
 /// Sends a sign-in link, then waits for it to be opened on this computer.
@@ -99,32 +116,57 @@ pub async fn orbit_sign_in_email(
     let server = parse_server(&server)?;
     let (listener, redirect) = login::listen().await.map_err(|e| e.to_string())?;
     let verifier = random_token();
-    orbit
-        .account
-        .email_start(
-            &server,
-            email.trim(),
-            &login::challenge(&verifier),
-            &redirect,
-        )
-        .await?;
-    finish(&orbit, &server, listener, &verifier).await
+    let attempt = async {
+        orbit
+            .account
+            .email_start(
+                &server,
+                email.trim(),
+                &login::challenge(&verifier),
+                &redirect,
+            )
+            .await?;
+        finish(&orbit, &server, listener, &verifier).await
+    };
+    cancellable(&orbit, attempt).await
 }
 
+/// Runs a sign-in attempt that "Cancel" can stop at any point.
+async fn cancellable(
+    orbit: &Orbit,
+    attempt: impl Future<Output = Result<(), String>>,
+) -> Result<(), String> {
+    let (cancel, cancelled) = oneshot::channel();
+    // Replacing an older sender cancels the older attempt.
+    *orbit.cancel.lock().unwrap() = Some(cancel);
+    tokio::select! {
+        result = attempt => result,
+        _ = cancelled => Err(CANCELLED.into()),
+    }
+}
+
+const CANCELLED: &str = "Sign-in cancelled.";
+
+/// Waits for a code the server accepts. Any program here can reach the callback,
+/// so a refused code doesn't end the attempt.
 async fn finish(
     orbit: &Orbit,
     server: &url::Url,
     listener: tokio::net::TcpListener,
     verifier: &str,
 ) -> Result<(), String> {
-    let (cancel, cancelled) = oneshot::channel();
-    // Replacing an older sender cancels the older wait.
-    *orbit.cancel.lock().unwrap() = Some(cancel);
-    let code = tokio::select! {
-        code = login::wait_for_code(listener) => code?,
-        _ = cancelled => return Err("Sign-in cancelled.".into()),
+    let wait = async {
+        loop {
+            let code = login::wait_for_code(&listener).await?;
+            match orbit.account.exchange(server, &code, verifier).await {
+                Ok(()) => return Ok(()),
+                Err(message) => tracing::warn!("a sign-in code was refused: {message}"),
+            }
+        }
     };
-    orbit.account.exchange(server, &code, verifier).await
+    tokio::time::timeout(login::WAIT, wait)
+        .await
+        .map_err(|_| "Sign-in timed out. Try again.".to_string())?
 }
 
 #[tauri::command]
@@ -135,7 +177,12 @@ pub fn orbit_cancel_sign_in(orbit: State<'_, Orbit>) {
 }
 
 #[tauri::command]
-pub async fn orbit_sign_out(orbit: State<'_, Orbit>) -> Result<(), String> {
+pub async fn orbit_sign_out(
+    orbit: State<'_, Orbit>,
+    apple: State<'_, crate::sideload::SideloaderMutex>,
+) -> Result<(), String> {
+    // The next person at this computer must not inherit the Apple sign-in.
+    *apple.lock().unwrap() = None;
     orbit.account.sign_out().await;
     Ok(())
 }

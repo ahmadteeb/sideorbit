@@ -176,7 +176,7 @@ function App() {
       <header className="workspace-header">
         <div className="header-left">
           <div className="title-block">
-            <img src={logo} alt={t("app.logo_alt")} className="logo" />
+            <img src={logo} alt="" className="logo" />
             <div>
               <h1 className="title">Orbit Setup</h1>
               <p className="subtitle">Put Orbit on your iPhone</p>
@@ -301,7 +301,7 @@ function App() {
           <section className="workspace-section">
             <div className="section-header">
               <p className="section-label">{t("app.installers")}</p>
-              <span className="section-hint">Download it from your Orbit release</span>
+              <span className="section-hint">From a file on this computer</span>
             </div>
             <GlassCard className="panel">
               <div className="action-row single-row">

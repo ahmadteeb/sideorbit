@@ -89,3 +89,86 @@
 .workspace {
   color-scheme: dark;
 }
+
+/* Upstream's global styles (App.css) are more specific than plain class rules:
+   restate hover, focus and placeholder so they don't leak in. */
+.orbit-gate input:focus-visible {
+  outline: 2px solid var(--color-focus-ring);
+  outline-offset: 2px;
+}
+.orbit-gate input::placeholder {
+  color: var(--color-text-muted);
+}
+.orbit-gate button:not(.primary):hover:not(:disabled),
+.orbit-bar button:hover:not(:disabled) {
+  background: var(--color-surface-2);
+  border-color: var(--color-border-strong);
+}
+.orbit-gate button.primary:hover:not(:disabled) {
+  background: var(--color-primary);
+  filter: brightness(0.95);
+}
+.orbit-gate .hint {
+  text-align: left;
+}
+.orbit-gate .problem,
+.orbit-bar .problem {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  align-items: center;
+}
+.orbit-bar .problem {
+  width: 100%;
+}
+.orbit-bar .error {
+  color: var(--color-danger);
+}
+.orbit-gate .row,
+.orbit-bar .row {
+  display: flex;
+  gap: var(--space-2);
+}
+.orbit-bar code {
+  font-family: var(--font-mono);
+}
+.spinner {
+  display: inline-block;
+  width: var(--space-4);
+  height: var(--space-4);
+  border: 2px solid var(--color-border-strong);
+  border-top-color: var(--color-primary);
+  border-radius: 50%;
+  vertical-align: middle;
+  animation: orbit-spin 1s linear infinite;
+}
+@keyframes orbit-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .spinner {
+    animation: none;
+  }
+}
+/* The bar plus the app fit the window without an extra scrollbar. */
+.orbit-frame {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+}
+.orbit-frame .workspace {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+}
+/* tokens.css opts the whole page into light and dark; upstream's screens and
+   dialogs are dark only. */
+:root {
+  color-scheme: dark;
+}
+.orbit-gate,
+.orbit-bar {
+  color-scheme: light dark;
+}

@@ -49,6 +49,7 @@ base64 = "0.22"
 getrandom = "0.3"
 rustls-platform-verifier = "0.7"
 sha2 = "0.10"
+tauri-plugin-single-instance = "2" # Tauri's own plugin (MIT/Apache-2.0)
 tokio-rustls = "0.26"
 url = "2"
 

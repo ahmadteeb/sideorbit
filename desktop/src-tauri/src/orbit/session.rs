@@ -63,6 +63,8 @@ impl RefreshStore for KeyringStore {
     fn save(&self, server: &str, refresh: &str) {
         let saved = Self::entry().map(|e| e.set_password(&format!("{server}\n{refresh}")));
         if !matches!(saved, Some(Ok(()))) {
+            // Never leave the spent token behind: reusing it ends the session.
+            self.clear();
             tracing::warn!("Couldn't save the Orbit session; you'll have to sign in next time.");
         }
     }
@@ -155,7 +157,9 @@ impl Account {
             .map_err(|_| UNREACHABLE.to_string())?;
         read(response).await.map_err(|e| match e {
             Refused::Other(message) => message,
-            Refused::SignedOut => "That address didn't answer like an Orbit server.".to_string(),
+            Refused::SignedOut => {
+                "That address didn't answer like an Orbit server. Check the address.".to_string()
+            }
         })
     }
 
@@ -229,6 +233,23 @@ impl Account {
         }
     }
 
+    /// The signed-in account's email, if the server can be asked.
+    pub async fn email(&self) -> Option<String> {
+        #[derive(Deserialize)]
+        struct Me {
+            email: Option<String>,
+        }
+        let (server, token) = self.access_token().await.ok()?;
+        let response = self
+            .http
+            .get(join(&server, "api/me"))
+            .bearer_auth(token)
+            .send()
+            .await
+            .ok()?;
+        read::<Me>(response).await.ok()?.email
+    }
+
     /// Forgets the session, even if the server can't be told.
     pub async fn sign_out(&self) {
         let old = self.session.lock().await.take();
@@ -273,7 +294,7 @@ fn message_of(body: &[u8]) -> String {
             Some(fix) => format!("{} {fix}", error.message),
             None => error.message,
         },
-        Err(_) => "The server answered with an error.".to_string(),
+        Err(_) => "The server answered with an error. Try again in a minute.".to_string(),
     }
 }
 
@@ -285,7 +306,9 @@ async fn read<T: serde::de::DeserializeOwned>(response: reqwest::Response) -> Re
         .map_err(|_| Refused::Other(UNREACHABLE.to_string()))?;
     if ok {
         return serde_json::from_slice(&body).map_err(|_| {
-            Refused::Other("That address didn't answer like an Orbit server.".into())
+            Refused::Other(
+                "That address didn't answer like an Orbit server. Check the address.".into(),
+            )
         });
     }
     if serde_json::from_slice::<ErrorBody>(&body).is_ok_and(|b| b.error.code == "invalid_grant") {

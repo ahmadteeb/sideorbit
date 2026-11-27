@@ -95,24 +95,19 @@ async fn answer(stream: &mut TcpStream, status: &str, body: &str) {
 
 /// Waits for the browser to arrive with a code. Other requests are turned away
 /// and don't end the wait.
-pub async fn wait_for_code(listener: TcpListener) -> Result<String, String> {
-    let wait = async {
-        loop {
-            let (mut stream, _) = listener.accept().await.map_err(|e| e.to_string())?;
-            let head = timeout(Duration::from_secs(5), super::proxy::read_head(&mut stream)).await;
-            let Ok(Ok((head, _))) = head else { continue };
-            match parse_callback(&head) {
-                Some(result) => {
-                    answer(&mut stream, "200 OK", PAGE).await;
-                    return result;
-                }
-                None => answer(&mut stream, "404 Not Found", "").await,
+pub async fn wait_for_code(listener: &TcpListener) -> Result<String, String> {
+    loop {
+        let (mut stream, _) = listener.accept().await.map_err(|e| e.to_string())?;
+        let head = timeout(Duration::from_secs(5), super::proxy::read_head(&mut stream)).await;
+        let Ok(Ok((head, _))) = head else { continue };
+        match parse_callback(&head) {
+            Some(result) => {
+                answer(&mut stream, "200 OK", PAGE).await;
+                return result;
             }
+            None => answer(&mut stream, "404 Not Found", "").await,
         }
-    };
-    timeout(WAIT, wait)
-        .await
-        .map_err(|_| "Sign-in timed out. Try again.".to_string())?
+    }
 }
 
 #[cfg(test)]
@@ -153,7 +148,7 @@ mod tests {
     #[tokio::test]
     async fn waits_past_other_requests_for_the_code() {
         let (listener, redirect) = listen().await.unwrap();
-        let waiting = tokio::spawn(wait_for_code(listener));
+        let waiting = tokio::spawn(async move { wait_for_code(&listener).await });
         visit(&redirect, "/favicon.ico").await;
         visit(&redirect, "/callback").await;
         visit(&redirect, "/callback?code=xyz").await;
@@ -163,7 +158,7 @@ mod tests {
     #[tokio::test]
     async fn a_callback_error_is_explained() {
         let (listener, redirect) = listen().await.unwrap();
-        let waiting = tokio::spawn(wait_for_code(listener));
+        let waiting = tokio::spawn(async move { wait_for_code(&listener).await });
         visit(&redirect, "/callback?error=account_exists").await;
         assert!(
             waiting

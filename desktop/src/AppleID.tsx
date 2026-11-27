@@ -216,11 +216,15 @@ export const AppleID = ({
                   });
                   setForceUpdateIds((v) => v + 1);
                 };
-                toast.promise(promise, {
+                toast.promise(
+                  // ORBIT: don't keep the password around after the attempt.
+                  () => promise().finally(() => setPasswordInput("")),
+                  {
                   loading: t("apple_id.logging_in"),
                   success: t("apple_id.logged_in_success"),
                   error: (e) => err(t("apple_id.login_failed"), e),
-                });
+                  },
+                );
               }}
             >
               <input

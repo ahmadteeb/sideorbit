@@ -46,10 +46,12 @@ pub fn create_sideloading_storage(
         warn!(
             "Keyring is not available, falling back to filesystem storage for sideloading data. This is insecure!"
         );
-        Ok(Box::new(FsStorage::new(
-            app.path().app_data_dir().map_err(|e| {
-                AppError::Misc(format!("Failed to get app data directory: {:?}", e))
-            })?,
-        )))
+        let dir = app.path().app_data_dir().map_err(|e| {
+            AppError::Misc(format!("Failed to get app data directory: {:?}", e))
+        })?;
+        // ORBIT: the signing key lands here; keep other users out.
+        crate::orbit::privacy::private_dir(&dir)
+            .map_err(|e| AppError::Misc(format!("Couldn't protect the data folder: {e}")))?;
+        Ok(Box::new(FsStorage::new(dir)))
     }
 }
