@@ -30,7 +30,7 @@ pub fn keyring_available() -> bool {
 }
 
 fn check_keyring_available() -> bool {
-    let entry = keyring::Entry::new("iloader", "test");
+    let entry = keyring::Entry::new("orbit-setup", "test");
     if let Ok(entry) = entry {
         return entry.set_password("test").is_ok() && entry.get_password().is_ok();
     }
@@ -41,15 +41,17 @@ pub fn create_sideloading_storage(
     app: &AppHandle,
 ) -> Result<Box<dyn SideloadingStorage>, AppError> {
     if keyring_available() {
-        Ok(Box::new(KeyringStorage::new("iloader".to_string())))
+        Ok(Box::new(KeyringStorage::new("orbit-setup".to_string())))
     } else {
         warn!(
             "Keyring is not available, falling back to filesystem storage for sideloading data. This is insecure!"
         );
-        Ok(Box::new(FsStorage::new(
-            app.path().app_data_dir().map_err(|e| {
-                AppError::Misc(format!("Failed to get app data directory: {:?}", e))
-            })?,
-        )))
+        let dir = app.path().app_data_dir().map_err(|e| {
+            AppError::Misc(format!("Failed to get app data directory: {:?}", e))
+        })?;
+        // ORBIT: the signing key lands here; keep other users out.
+        crate::orbit::privacy::private_dir(&dir)
+            .map_err(|e| AppError::Misc(format!("Couldn't protect the data folder: {e}")))?;
+        Ok(Box::new(FsStorage::new(dir)))
     }
 }

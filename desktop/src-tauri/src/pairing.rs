@@ -122,7 +122,7 @@ async fn generate_rppairing_plist(
 
 fn new_host_label() -> String {
     let id = uuid::Uuid::new_v4().simple().to_string();
-    format!("iloader-{}", &id[..6])
+    format!("orbit-{}", &id[..6])
 }
 
 fn host_label(app: &AppHandle, udid: &str) -> Result<String, AppError> {
@@ -515,6 +515,7 @@ pub async fn installed_pairing_apps(
     Ok(result)
 }
 
+#[allow(dead_code)] // ORBIT: only the removed SideStore install used it
 pub async fn get_sidestore_info(
     device: &DeviceInfo,
     live_container: bool,

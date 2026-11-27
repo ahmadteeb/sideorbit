@@ -8,6 +8,7 @@ import { ErrorProvider } from "./ErrorContext";
 import { DialogProvider } from "./DialogContext";
 import "./i18next";
 import { PlatformProvider } from "./PlatformContext";
+import { OrbitGate } from "./orbit/OrbitGate"; // ORBIT
 
 ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
   <React.StrictMode>
@@ -16,7 +17,9 @@ ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
         <ErrorProvider>
           <DialogProvider>
             <LogProvider>
-              <App />
+              <OrbitGate>
+                <App />
+              </OrbitGate>
             </LogProvider>
           </DialogProvider>
         </ErrorProvider>

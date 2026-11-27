@@ -32,7 +32,7 @@ export const AppleID = ({
   const [addAccountOpen, setAddAccountOpen] = useState<boolean>(false);
   const [anisetteServer] = useStore<string>(
     "anisetteServer3-1",
-    "mac-ani.jkcoxson.com",
+    "orbit",
   );
   const [certs, setCerts] = useState<Certificate[] | null>(null);
   const [selectedSerials, setSelectedSerials] = useState<string[]>([]);
@@ -216,11 +216,15 @@ export const AppleID = ({
                   });
                   setForceUpdateIds((v) => v + 1);
                 };
-                toast.promise(promise, {
+                toast.promise(
+                  // ORBIT: don't keep the password around after the attempt.
+                  () => promise().finally(() => setPasswordInput("")),
+                  {
                   loading: t("apple_id.logging_in"),
                   success: t("apple_id.logged_in_success"),
                   error: (e) => err(t("apple_id.login_failed"), e),
-                });
+                  },
+                );
               }}
             >
               <input

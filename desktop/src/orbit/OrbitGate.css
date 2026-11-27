@@ -1,0 +1,174 @@
+/* ORBIT: tokens only (design-system/orbit). Follows the system light/dark. */
+.orbit-gate {
+  color-scheme: light dark;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-4);
+  min-height: 100vh;
+  padding: var(--space-8) var(--space-4);
+  overflow-y: auto;
+  background: var(--color-bg);
+  color: var(--color-text);
+  font-family: var(--font-sans);
+  text-align: center;
+}
+.orbit-gate h1 {
+  margin: 0;
+  font-size: 1.375rem;
+}
+.orbit-gate p {
+  max-width: 28rem;
+  margin: 0;
+}
+.orbit-gate .muted {
+  color: var(--color-text-muted);
+}
+.orbit-gate form,
+.orbit-gate .choices {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  width: min(22rem, 100%);
+  align-items: stretch;
+}
+.orbit-gate label {
+  text-align: left;
+  font-weight: 600;
+}
+.orbit-gate input {
+  min-height: var(--target-min);
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface-2);
+  color: var(--color-text);
+  font: inherit;
+  user-select: text;
+  -webkit-user-select: text;
+}
+.orbit-gate button,
+.orbit-bar button {
+  min-height: var(--target-min);
+  padding: var(--space-2) var(--space-4);
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  color: var(--color-text);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+.orbit-gate button.primary {
+  background: var(--color-primary);
+  border-color: var(--color-primary);
+  color: var(--color-on-primary);
+}
+.orbit-gate button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.orbit-gate .error {
+  color: var(--color-danger);
+  user-select: text;
+  -webkit-user-select: text;
+}
+.orbit-bar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-4);
+  border-bottom: 1px solid var(--color-border);
+  background: var(--color-surface);
+  color: var(--color-text);
+  font-family: var(--font-sans);
+}
+/* The rest of the app is dark only, whatever the system setting. */
+.workspace {
+  color-scheme: dark;
+}
+
+/* Upstream's global styles (App.css) are more specific than plain class rules:
+   restate hover, focus and placeholder so they don't leak in. */
+.orbit-gate input:focus-visible {
+  outline: 2px solid var(--color-focus-ring);
+  outline-offset: 2px;
+}
+.orbit-gate input::placeholder {
+  color: var(--color-text-muted);
+}
+.orbit-gate button:not(.primary):hover:not(:disabled),
+.orbit-bar button:hover:not(:disabled) {
+  background: var(--color-surface-2);
+  border-color: var(--color-border-strong);
+}
+.orbit-gate button.primary:hover:not(:disabled) {
+  background: var(--color-primary);
+  filter: brightness(0.95);
+}
+.orbit-gate .hint {
+  text-align: left;
+}
+.orbit-gate .problem,
+.orbit-bar .problem {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  align-items: center;
+}
+.orbit-bar .problem {
+  width: 100%;
+}
+.orbit-bar .error {
+  color: var(--color-danger);
+}
+.orbit-gate .row,
+.orbit-bar .row {
+  display: flex;
+  gap: var(--space-2);
+}
+.orbit-bar code {
+  font-family: var(--font-mono);
+}
+.spinner {
+  display: inline-block;
+  width: var(--space-4);
+  height: var(--space-4);
+  border: 2px solid var(--color-border-strong);
+  border-top-color: var(--color-primary);
+  border-radius: 50%;
+  vertical-align: middle;
+  animation: orbit-spin 1s linear infinite;
+}
+@keyframes orbit-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .spinner {
+    animation: none;
+  }
+}
+/* The bar plus the app fit the window without an extra scrollbar. */
+.orbit-frame {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+}
+.orbit-frame .workspace {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+}
+/* tokens.css opts the whole page into light and dark; upstream's screens and
+   dialogs are dark only. */
+:root {
+  color-scheme: dark;
+}
+.orbit-gate,
+.orbit-bar {
+  color-scheme: light dark;
+}

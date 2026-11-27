@@ -11,6 +11,9 @@ mod secure_storage;
 mod error;
 mod logging;
 mod operation;
+mod orbit; // ORBIT
+#[cfg(target_os = "linux")]
+pub use orbit::privacy::private_dir; // ORBIT: for main.rs
 
 use crate::{
     account::{
@@ -25,7 +28,7 @@ use crate::{
         place_pairing_cmd,
     },
     secure_storage::{force_disable_keyring, keyring_available},
-    sideload::{SideloaderMutex, install_sidestore_operation, sideload_operation},
+    sideload::{SideloaderMutex, sideload_operation},
 };
 use tauri::Manager;
 use tracing_subscriber::{Layer, Registry, fmt, layer::SubscriberExt, util::SubscriberInitExt};
@@ -33,8 +36,14 @@ use tracing_subscriber::{Layer, Registry, fmt, layer::SubscriberExt, util::Subsc
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
+        // ORBIT: one instance only. Two would spend the same refresh token.
+        .plugin(tauri_plugin_single_instance::init(|app, _, _| {
+            if let Some(window) = app.get_webview_window("main") {
+                let _ = window.set_focus();
+            }
+        }))
         .plugin(tauri_plugin_process::init())
-        .plugin(tauri_plugin_updater::Builder::new().build())
+        // ORBIT: no updater. Upstream's would replace Orbit Setup with iloader.
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_store::Builder::new().build())
@@ -49,7 +58,7 @@ pub fn run() {
 
             let file_appender = tracing_appender::rolling::RollingFileAppender::builder()
                 .rotation(tracing_appender::rolling::Rotation::DAILY)
-                .filename_prefix("iloader")
+                .filename_prefix("orbit-setup")
                 .filename_suffix("log")
                 .max_log_files(2)
                 .build(&log_dir)
@@ -59,10 +68,10 @@ pub fn run() {
                 .with_writer(file_appender)
                 .with_target(true)
                 .with_ansi(false)
-                .with_filter(tracing_subscriber::filter::LevelFilter::DEBUG);
+                .with_filter(orbit::privacy::log_filter()); // ORBIT
 
             let frontend_layer = logging::FrontendLoggingLayer::new(app.handle().clone())
-                .with_filter(tracing_subscriber::filter::LevelFilter::DEBUG);
+                .with_filter(orbit::privacy::log_filter()); // ORBIT
 
             Registry::default()
                 .with(file_layer)
@@ -101,6 +110,7 @@ pub fn run() {
             app.manage(DeviceInfoMutex::new(None));
             app.manage(SideloaderMutex::new(None));
             app.manage(PairingCancelToken::new(None));
+            app.manage(orbit::Orbit::new()); // ORBIT
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -112,7 +122,6 @@ pub fn run() {
             list_devices,
             sideload_operation,
             set_selected_device,
-            install_sidestore_operation,
             get_certificates,
             revoke_certificate,
             list_app_ids,
@@ -126,6 +135,13 @@ pub fn run() {
             force_disable_keyring,
             cancel_pairing,
             has_stored_rppairing,
+            // ORBIT
+            orbit::orbit_status,
+            orbit::orbit_methods,
+            orbit::orbit_sign_in,
+            orbit::orbit_sign_in_email,
+            orbit::orbit_cancel_sign_in,
+            orbit::orbit_sign_out,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

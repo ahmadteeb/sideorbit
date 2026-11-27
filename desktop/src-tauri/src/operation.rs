@@ -21,6 +21,7 @@ impl<'a> Operation<'a> {
         Operation { id, window }
     }
 
+    #[allow(dead_code)] // ORBIT: only the removed SideStore install used it
     pub fn move_on(&self, old_id: &str, new_id: &str) -> Result<(), AppError> {
         self.complete(old_id)?;
         self.start(new_id)

@@ -54,12 +54,12 @@ Each phase is one PR (or a few sub-PRs) with a slash command in `.claude/command
 
 **Done when:** on a real iPhone (installed via iloader for now), the user can sign in, add a source, install an app, and see it refresh through the Shortcut and through background refresh, with matching events on the dashboard.
 
-## Phase 4: Orbit Setup desktop app ☐  → `/phase-4`
-- [ ] Fork iloader into `desktop/` (git subtree, keep upstream remote), rebrand, keep the MIT notice
-- [ ] Orbit flow: Orbit login → device detect → drivers → Apple ID → install Orbit → pairing file → phone checklist
+## Phase 4: Orbit Setup desktop app ◐  → `/phase-4`
+- [x] Fork iloader into `desktop/` (git subtree, keep upstream remote), rebrand, keep the MIT notice. *Translations other than English still describe some upstream behaviour*
+- [ ] Orbit flow: Orbit login → device detect → drivers → Apple ID → install Orbit → pairing file → phone checklist. *Done: Orbit login, anisette through your server. Not done: the wizard, drivers, placing the pairing file into Orbit, the checklist*
 - [ ] Windows: detect AMDS / Apple Devices; silent install via winget (resolve **P03**) with progress; fallback
 - [ ] Linux: bundled usbmuxd + udev rule via pkexec on first run (resolve **P04** for Flatpak)
-- [ ] Packaging: dmg (universal), msi/nsis, AppImage, deb, rpm, Flatpak manifest, AUR `PKGBUILD` (`orbit-setup-bin`)
+- [ ] Packaging: dmg (universal), msi/nsis, AppImage, deb, rpm, Flatpak manifest, AUR `PKGBUILD` (`orbit-setup-bin`). *dmg, msi, nsis, AppImage, deb and rpm build in CI; Flatpak and AUR are not written*
 - [ ] UI per `design-system/orbit/pages/desktop.md`
 
 **Done when:** on clean Windows 11, Ubuntu 24.04, Fedora, Arch and macOS machines, a non-technical tester gets Orbit installed and paired without installing anything by hand.
