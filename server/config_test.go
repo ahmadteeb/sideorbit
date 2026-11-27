@@ -37,6 +37,8 @@ func TestLoadConfig(t *testing.T) {
 		{"smtp without sender", map[string]string{"SMTP_HOST": "smtp.example.com"}, "SMTP_FROM"},
 		{"half a vapid pair", map[string]string{"VAPID_PUBLIC_KEY": "k"}, "VAPID_PRIVATE_KEY"},
 		{"vapid subject", map[string]string{"VAPID_PUBLIC_KEY": "k", "VAPID_PRIVATE_KEY": "k", "VAPID_SUBJECT": "ops"}, "VAPID_SUBJECT"},
+		{"plaintext mail on a private address", map[string]string{"SMTP_HOST": "mailpit", "SMTP_FROM": "a@example.com", "SMTP_ALLOW_PLAINTEXT": "true", "PUBLIC_URL": "https://192.168.1.4:8443"}, ""},
+		{"plaintext mail on a public server", map[string]string{"SMTP_HOST": "mailpit", "SMTP_FROM": "a@example.com", "SMTP_ALLOW_PLAINTEXT": "true"}, "local testing"},
 		{"no sign-in method", map[string]string{"GITHUB_CLIENT_ID": "", "GITHUB_CLIENT_SECRET": ""}, "at least one"},
 	}
 	for _, tt := range tests {

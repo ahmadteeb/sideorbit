@@ -41,18 +41,19 @@ Format: **ID · Decision** · *Why* · Alternatives rejected. Add new entries at
 | D35 | **Orbit Setup reaches anisette through a proxy on `127.0.0.1` that adds the Orbit token; the path carries a random secret** | The sign-in library (`isideload`) takes a URL but can't send headers. No fork needed, and anisette traffic holds no Apple credentials | Forking `isideload`; a public anisette server (D04) |
 | D36 | **Orbit Setup drops upstream's updater, developer tools, public anisette list and SideStore/LiveContainer downloads, and uses its own name, icon and keyring entries** | The updater would install iloader over it; devtools don't belong in an app that handles Apple passwords; `LICENSE-BRANDING` reserves the name and artwork | Shipping upstream's defaults |
 | D37 | **Orbit Setup logs dependencies at INFO and above only. Without a system keyring, upstream's file storage stays but in an owner-only folder** | Debug output held the Apple ID email and anisette data, and logs get pasted into bug reports. Memory-only storage would mint a new Apple certificate every launch, which can revoke the one installed apps depend on | DEBUG everywhere; in-memory fallback |
+| D38 | **P08 (owner): the first email-link sign-in to an account whose address was never proven asks "was that you?"** Yes keeps everything; No removes the older sign-in methods, sessions and data | Protects the mailbox's current owner without breaking people who signed up with GitHub first. Supersedes part of D25 | Always removing; leaving it open |
+| D39 | **P09 (owner): web push endpoints must be Apple's, Google's, Mozilla's or Microsoft's push service** | Users supply the endpoint; there is no reason for the server to POST anywhere else | Any public HTTPS host |
+| D40 | **P01 (owner): depend on SideSign and minimuxer pinned to exact commits, with a committed `Package.resolved`; read the password-handling code and report before it sees a real Apple ID** | See "P01 research" | Forking into the owner's account; not adding them |
+| D41 | **Local network testing: `deploy/local.sh` with Caddy's local authority, a mail catcher and `SMTP_ALLOW_PLAINTEXT`, which the server accepts only when `PUBLIC_URL` is a local address** | The owner tests on this machine; ports 80/443 are taken and there is no domain or mail server | Logging sign-in links; disabling TLS |
 
 ## Pending decisions (to be resolved during the named phase)
 
 | ID | Question | Phase |
 |---|---|---|
-| P01 | **Research done (below); the dependency choice needs the owner's approval** | 3 |
 | P03 | winget IDs for Apple Devices / AMDS; fallback when winget is missing (older Windows 10). **Proposed:** `winget install --id 9NP83LWLPZ9K --source msstore` (ID must be confirmed on a Windows machine), falling back to opening Apple's iTunes download page | 4 |
 | P04 | Flatpak USB strategy. **Proposed:** require the host's usbmuxd (most distributions ship it) and show how to install it; a sandbox shouldn't install system services. Alternative: bundle a daemon with `--device=all` | 4 |
 | P05 | LiveContainer license and integration (built-in store mode) | 5 |
 | P06 | Code signing: Apple notarization / Windows Authenticode certificates (cost vs warnings) | 6 |
-| P08 | Account pre-hijacking: when a magic link first proves an address, remove the older sign-in methods and sessions (and their devices and sources?), or ask the user to confirm them? Needs a data model change and supersedes part of D25 | 6, before real users |
-| P09 | Accept web push endpoints only from known push services (Apple, Google, Mozilla, Microsoft)? Recommended; an unusual browser would lose alerts | 6 |
 | P10 | Protecting the shared email and provisioning caps: captcha or proof of work when they run low (D24 ruled a captcha out), or reserve a share for established accounts | 6 |
 | P11 | Pairing file protection class, given refresh must run with the screen locked | 3 |
 | P12 | Keep secret query tokens in saved source URLs? Encrypt backups? | 6 |

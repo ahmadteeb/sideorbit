@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"net/netip"
 	"net/url"
 	"strconv"
 	"strings"
@@ -126,8 +127,14 @@ func loadConfig(getenv func(string) string) (config, error) {
 		if from == "" {
 			fail("SMTP_FROM is required with SMTP_HOST")
 		}
+		plaintext := getenv("SMTP_ALLOW_PLAINTEXT") == "true"
+		// Sign-in links in clear text are only acceptable on a test setup.
+		if plaintext && !localHost(a.PublicURL.Hostname()) {
+			fail("SMTP_ALLOW_PLAINTEXT is for local testing: PUBLIC_URL must be a local network address")
+		}
 		a.Mailer = mail.SMTP{Host: host, Port: cmp.Or(getenv("SMTP_PORT"), "587"),
-			Username: getenv("SMTP_USERNAME"), Password: getenv("SMTP_PASSWORD"), From: from}
+			Username: getenv("SMTP_USERNAME"), Password: getenv("SMTP_PASSWORD"), From: from,
+			AllowPlaintext: plaintext}
 	}
 	cfg.retention = time.Duration(count("EVENT_RETENTION_DAYS", 90)) * 24 * time.Hour
 	public, private, subject := getenv("VAPID_PUBLIC_KEY"), getenv("VAPID_PRIVATE_KEY"), getenv("VAPID_SUBJECT")
@@ -145,4 +152,14 @@ func loadConfig(getenv func(string) string) (config, error) {
 		fail("configure at least one sign-in method (GitHub, Google or SMTP)")
 	}
 	return cfg, errors.Join(errs...)
+}
+
+// localHost reports whether host can only be reached from this machine or a
+// private network.
+func localHost(host string) bool {
+	if host == "localhost" || strings.HasSuffix(host, ".local") {
+		return true
+	}
+	ip, err := netip.ParseAddr(host)
+	return err == nil && (ip.IsLoopback() || ip.IsPrivate())
 }

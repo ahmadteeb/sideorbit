@@ -19,6 +19,9 @@ import (
 // messages carry sign-in links.
 type SMTP struct {
 	Host, Port, Username, Password, From string
+	// AllowPlaintext permits an unencrypted server on another host, for a mail
+	// catcher in local testing. The config allows it only for a local Orbit.
+	AllowPlaintext bool
 }
 
 // Send delivers one plain-text message.
@@ -57,7 +60,7 @@ func (s SMTP) Send(ctx context.Context, to, subject, body string) error {
 			if err := c.StartTLS(tlsConfig); err != nil {
 				return fmt.Errorf("starttls: %w", err)
 			}
-		} else if !isLocal(s.Host) {
+		} else if !isLocal(s.Host) && !s.AllowPlaintext {
 			return errors.New("smtp server does not offer STARTTLS")
 		}
 	}

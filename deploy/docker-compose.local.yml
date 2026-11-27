@@ -1,0 +1,28 @@
+# Local testing on your own network, on top of docker-compose.yml. Use local.sh;
+# see docs/LOCAL_TESTING.md. Never use this for a server on the internet.
+name: orbit-local
+
+services:
+  caddy:
+    # Only on this machine's LAN address, and not on 80/443.
+    ports: !override
+      - "${ORBIT_BIND:?run local.sh}:8443:443"
+      - "${ORBIT_BIND}:8081:8081"
+    environment:
+      ORBIT_GLOBAL_EXTRA: "default_sni ${ORBIT_DOMAIN}"
+      ORBIT_TLS: tls internal # a certificate from Caddy's own local authority
+    volumes:
+      - ./local/extra:/etc/caddy/extra:ro
+
+  orbit-server:
+    env_file: !override [.env.local]
+
+  # Catches the sign-in emails instead of sending them.
+  mailpit:
+    image: axllent/mailpit@sha256:23a2ef85bc50853ab3093645d1d64679afd8887e89da5e48a88940c172591a4e
+    restart: unless-stopped
+    environment:
+      MP_UI_AUTH: "orbit:${MAILPIT_PASSWORD:?run local.sh}"
+    ports:
+      - "${ORBIT_BIND}:8025:8025"
+    networks: [edge]
